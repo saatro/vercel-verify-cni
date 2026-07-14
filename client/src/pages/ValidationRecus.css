@@ -1,0 +1,117 @@
+/* --- Mise en page globale --- */
+.validation-page {
+    display: flex;
+    min-height: 100vh;
+    background-color: #f4f7f9;
+}
+
+.validation-content {
+    flex-grow: 1;
+    padding: 30px 40px;
+    margin-left: 200px;
+    max-width: 1200px;
+}
+
+.validation-content h2 {
+    font-size: 2rem;
+    color: #333;
+    margin-bottom: 30px;
+}
+
+.no-data {
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* --- Tableau de validation --- */
+.validation-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.validation-table th, .validation-table td {
+    padding: 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.validation-table th {
+    background-color: #5a7d9b;
+    color: white;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+}
+
+.validation-table tr:hover {
+    background-color: #f7f9fb;
+}
+
+/* --- Tags de Statut IA --- */
+.tag {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.ia-verified {
+    background-color: #e6f7e6;
+    color: #4CAF50;
+}
+
+.ia-rejected {
+    background-color: #ffe6e6;
+    color: #f44336;
+}
+
+.ia-error {
+    background-color: #fff8e1;
+    color: #ff9800;
+}
+
+.ia-pending {
+    background-color: #e0f2f1;
+    color: #00bcd4;
+}
+
+/* --- Boutons d'Action --- */
+.btn-ia-check, .btn-validate {
+    padding: 8px 12px;
+    margin-right: 10px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.btn-ia-check {
+    background-color: #81d4fa;
+    color: #000;
+}
+
+.btn-ia-check:hover:not(:disabled) {
+    background-color: #4fc3f7;
+}
+
+.btn-ia-check:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+.btn-validate {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.btn-validate:hover {
+    background-color: #43a047;
+}

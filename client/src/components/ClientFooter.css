@@ -1,0 +1,225 @@
+/* ========================================
+   CLIENT FOOTER - NAVIGATION MODERNE
+   ======================================== */
+
+.client-footer {
+    position: fixed;
+    align-items: center;
+    justify-content: center; justify-items: center;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 25px 5px;
+    margin-top: 12px;
+    background: linear-gradient(to top, rgb(255, 255, 255), rgba(255, 255, 255, 0.95));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+    z-index: 1000;
+}
+
+.footer-content {
+    display: flex;
+    justify-content: center;
+    /* ✅ CENTRÉ */
+    align-items: center;
+    gap: 30px;
+    /* ✅ Espacement entre boutons */
+    padding: -10px;
+    max-width: 650px;
+    margin-bottom: -15px;
+}
+
+.footer-item {
+    flex: 0 0 auto;
+    /* ✅ Taille fixe, pas de flex */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: -2px;
+    padding: 21px 13px;
+    margin-bottom: -21px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    color: #64748b;
+    position: relative;
+    min-width: 60px;
+    /* ✅ Largeur minimum */
+}
+
+.footer-item:active {
+    transform: scale(0.95);
+}
+
+.icon-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 35px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    margin-bottom: -2px;
+    background: #fbfcfb4d;
+    box-shadow: 0 3px 5px rgba(85, 85, 85, 0.692);
+}
+
+.footer-item.active .icon-wrapper {
+    background: var(--item-color, #fdfdfd);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 5px rgba(2, 170, 72, 0.5);
+}
+
+.footer-item:not(.active) .icon-wrapper:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.active-dot {
+    position: absolute;
+    bottom: -2px;
+    width: 4px;
+    height: 4px;
+    background: white;
+    border-radius: 50%;
+    animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.5;
+        transform: scale(1.3);
+    }
+}
+
+.item-label {
+    font-size: 13px;
+    font-weight: 500;
+
+    transition: all 0.3s ease;
+    margin-bottom: 1px;
+}
+
+.footer-item.active .item-label {
+    color: var(--item-color, #10b981);
+    font-weight: 700;
+}
+
+/* ✅ Bouton déconnexion discret */
+.footer-item.logout {
+    opacity: 0.6;
+    min-width: 50px;
+}
+
+.footer-item.logout .icon-wrapper {
+    width: 40px;
+    height: 40px;
+}
+
+.footer-item.logout:hover {
+    opacity: 1;
+    color: #ef4444;
+}
+
+.footer-item.logout .item-label {
+    font-size: 11px;
+}
+
+/* Safe area pour iPhone */
+.footer-safe-area {
+    height: env(safe-area-inset-bottom);
+    background: white;
+}
+
+/* ========================================
+   RESPONSIVE
+   ======================================== */
+
+@media (max-width: 380px) {
+    .footer-content {
+        padding: 6px 8px 2px;
+        gap: 4px;
+    }
+
+    .icon-wrapper {
+        width: 40px;
+        height: 40px;
+    }
+
+    .item-label {
+        font-size: 9px;
+    }
+
+    .footer-item.logout .icon-wrapper {
+        width: 34px;
+        height: 34px;
+    }
+
+    .footer-item.logout .item-label {
+        font-size: 8px;
+    }
+
+    .footer-item {
+        min-width: 55px;
+        padding: 6px 8px;
+    }
+}
+
+@media (min-width: 768px) {
+    .footer-content {
+        padding: 10px 16px 6px;
+        gap: 12px;
+    }
+
+    .icon-wrapper {
+        width: 48px;
+        height: 48px;
+    }
+
+    .item-label {
+        font-size: 11px;
+    }
+
+    .footer-item {
+        min-width: 70px;
+        padding: 6px 16px;
+    }
+}
+
+/* Animation d'apparition */
+@keyframes slideUp {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.client-footer {
+    animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* États hover (desktop) */
+@media (hover: hover) and (pointer: fine) {
+    .footer-item:hover:not(.active) {
+        color: #334155;
+    }
+
+    .footer-item:hover:not(.active) .icon-wrapper {
+        transform: translateY(-2px);
+    }
+}

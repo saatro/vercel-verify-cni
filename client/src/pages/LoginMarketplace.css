@@ -1,0 +1,310 @@
+/* --- CONFIGURATION DES VARIABLES --- */
+:root {
+  --accent: #7c3aed; /* Ajusté sur le violet du nouveau logo */
+  --bg-deep: #f0f2f5;
+  --card-glass: rgba(255, 255, 255, 0.226);
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(0, 0, 0, 0.5);
+}
+
+.login-container {
+  min-height: 100vh;
+  width: 100vw;
+  background: radial-gradient(circle at top right, #fbfbfc, #8702f35e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-container::before {
+  content: "";
+  position: absolute;
+  top: -10%;
+  right: -10%;
+  width: 300px;
+  height: 300px;
+  background: var(--accent);
+  filter: blur(120px);
+  opacity: 0.15;
+  border-radius: 50%;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--card-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-glass);
+  border-radius: 32px;
+  padding: 40px 30px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  position: relative;
+  animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.back-btn {
+  position: absolute;
+  top: 25px;
+  left: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-glass);
+  color: #fcbb09;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+
+.back-btn:hover {
+  background: var(--accent);
+}
+
+/* --- LOGO STYLE --- */
+.login-header {
+  text-align: center;
+  margin-bottom: 35px;
+}
+
+.login-logo-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.login-brand-logo {
+  height: 55px;
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 10px rgba(124, 58, 237, 0.3));
+}
+
+.login-brand-subtext {
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: #5305ac;
+  letter-spacing: 3px;
+  opacity: 0.8;
+}
+
+.login-header p {
+  color: #021631;
+  font-size: 0.9rem;
+  margin-top: 10px;
+}
+
+/* --- FORMULAIRE --- */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: 16px;
+  color: #64748b;
+  transition: color 0.3s ease;
+}
+
+.input-group input {
+  width: 100%;
+  background: var(--input-bg);
+  border: 1px solid var(--border-glass);
+  border-radius: 16px;
+  padding: 16px 16px 16px 48px;
+  color: #adadad;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.input-group input:focus {
+  border-color: var(--accent);
+  background: rgba(124, 58, 237, 0.05);
+  box-shadow: 0 0 20px rgba(124, 58, 237, 0.1);
+}
+
+.input-group input:focus + .input-icon {
+  color: var(--accent);
+}
+
+/* --- BOUTON VALIDER --- */
+.login-submit-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 16px;
+  padding: 16px;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+  box-shadow: 0 10px 20px rgba(124, 58, 237, 0.2);
+}
+
+.login-submit-btn:disabled {
+  opacity: 0.6;
+}
+
+/* --- FOOTER --- */
+.login-footer {
+  text-align: center;
+  margin-top: 30px;
+  font-size: 14px;
+  color: #fdfeff;
+}
+
+.login-footer a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 700;
+  margin-left: 5px;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── Système de Tabs pour la Marketplace ── */
+.auth-tabs-marketplace {
+  display: flex;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 14px;
+  padding: 4px;
+  margin: 10px 0 10px 0;
+  border: 1px solid var(--border-glass);
+  margin-top: -30px;
+}
+
+.tab-btn-market {
+  flex: 1;
+  padding: 5px 5px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.tab-btn-market.active {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3);
+}
+
+/* ── Section Structure Schéma MamboLock ── */
+.market-pattern-section {
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border-glass);
+  border-radius: 20px;
+  padding: 10px 10px;
+  text-align: center;
+}
+
+.market-pattern-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #2d2e2e;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  letter-spacing: 0.5px;
+}
+
+.market-pattern-wrapper {
+  background: #ffffffe1;
+  border-radius: 16px;
+  padding: 5px;
+  display: inline-block;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.market-pattern-wrapper svg circle {
+  fill: #1e293b !important;
+  opacity: 1 !important;
+}
+
+.market-pattern-wrapper svg line {
+  stroke: var(--accent) !important;
+  stroke-width: 5px !important;
+}
+
+/* ── Vue Onglet Google ── */
+.google-tab-content-market {
+  padding: 10px 0 5px;
+  text-align: center;
+}
+
+.google-notice-market {
+  font-size: 13.5px;
+  color: #334155 !important;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.google-btn-marketplace {
+  width: 100%;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #334155;
+  font-size: 15px;
+}
+
+.google-btn-marketplace:hover {
+  background: #f8fafc;
+  transform: translateY(-1px);
+}
+
+/* Animations d'apparition */
+.animate-fade-in {
+  animation: marketFadeIn 0.35s ease-out forwards;
+}
+
+@keyframes marketFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}

@@ -1,0 +1,156 @@
+/* --- Conteneur principal (Modale) --- */
+.historique-modale-content {
+    background: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    width: 90%;
+    max-width: 800px;
+    margin: 20px auto;
+}
+
+.historique-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+
+.historique-header h3 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #343a40;
+}
+
+.btn-close-historique {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #6c757d;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.btn-close-historique:hover {
+    color: #dc3545;
+}
+
+/* --- Résumé du Livreur --- */
+.livreur-summary-card {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border-left: 5px solid #007bff;
+    display: flex;
+    justify-content: space-between;
+}
+
+.livreur-summary-card p {
+    margin: 0;
+    font-size: 1rem;
+    color: #495057;
+}
+
+.current-balance-display {
+    font-weight: 700;
+    color: #28a745;
+    font-size: 1.1rem;
+}
+
+/* --- Tableau des transactions --- */
+.historique-table-container {
+    max-height: 500px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+}
+
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.history-table th, .history-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.history-table th {
+    background-color: #f8f9fa;
+    color: #495057;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+}
+
+/* Mise en évidence des lignes */
+.history-table tbody tr:hover {
+    background-color: #f1f8ff;
+}
+
+.row-debit {
+    /* Légère coloration pour les dépenses */
+    background-color: #fffafb; 
+}
+.row-credit {
+    /* Légère coloration pour les recharges */
+    background-color: #fafffb; 
+}
+
+
+/* --- Tags de Transaction --- */
+.transaction-tag {
+    padding: 4px 8px;
+    border-radius: 15px;
+    font-weight: 600;
+    font-size: 0.8em;
+    white-space: nowrap;
+}
+
+.tag-credit {
+    background-color: #e6f7e9;
+    color: #28a745; /* Vert */
+}
+
+.tag-debit {
+    background-color: #fbe6e8;
+    color: #dc3545; /* Rouge */
+}
+
+/* --- Cellules de montant --- */
+.amount-cell {
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+}
+
+.amount-plus {
+    color: #28a745; /* Vert pour Crédit */
+}
+
+.amount-minus {
+    color: #dc3545; /* Rouge pour Débit */
+}
+
+/* --- Messages d'état --- */
+.historique-loading-msg, .historique-error-msg, .historique-empty-msg {
+    padding: 20px;
+    text-align: center;
+    border-radius: 8px;
+    margin-top: 20px;
+}
+
+.historique-error-msg {
+    color: #721c24;
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+}
+
+.historique-empty-msg {
+    color: #6c757d;
+    background-color: #f4f6f9;
+}

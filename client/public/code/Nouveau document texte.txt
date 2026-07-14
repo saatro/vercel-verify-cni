@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Mambo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@900&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --mambo-red: #FF0000;
+      --mambo-typo: scaleY(1.4) scaleX(0.85) skewX(-17deg);
+    }
+
+    body, html {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      background-color: #FFFFFF;
+      overflow: hidden;
+    }
+
+    #splash-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+    }
+
+    /* --- LOGO ROUGE : CENTRAGE PARFAIT --- */
+    #mambo-moving-logo {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 17vw;
+      font-weight: 900;
+      color: var(--mambo-red);
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) var(--mambo-typo);
+      white-space: nowrap;
+      z-index: 10;
+      transition: all 1.1s cubic-bezier(0.65, 0, 0.35, 1);
+    }
+
+    /* --- ÉTAT FINAL : TAILLE RÉALISTE POUR LE HEADER --- */
+    #splash-screen.shrink #mambo-moving-logo {
+      top: 40px; 
+      left: 5%;
+      /* On réduit la taille pour correspondre au header sans que ce soit minuscule */
+      transform: translate(0, -50%) var(--mambo-typo);
+      font-size: 32px; 
+      letter-spacing: -2px;
+    }
+
+    /* --- COUCHE ROUGE : BALAYAGE DIAGONAL --- */
+    .layer-top {
+      background-color: var(--mambo-red);
+      z-index: 20;
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      /* Couvre tout le rectangle */
+      clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+      transition: clip-path 1.5s cubic-bezier(0.7, 0, 0.2, 1);
+    }
+
+    .layer-top span {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 17vw;
+      color: #FFFFFF;
+      font-weight: 900;
+      transform: var(--mambo-typo);
+      letter-spacing: -1.4vw;
+    }
+
+    /* Animation Diagonale : se retire vers le haut-gauche */
+    #splash-screen.swipe-active .layer-top {
+      clip-path: polygon(0% 0%, 0% 0%, 0% 100%, 0% 100%);
+    }
+
+    /* --- APPARITION DE L'APP (SANS DISPARAITRE) --- */
+    #root {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.8s ease-out 0.5s, transform 0.8s ease-out 0.5s;
+    }
+
+    #splash-screen.shrink ~ #root {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* On ne supprime que le fond du splash, pas le logo en mouvement */
+    .fade-bg {
+      background-color: transparent !important;
+      transition: background-color 0.5s ease;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="splash-screen">
+    <div id="mambo-moving-logo">MAMBO</div>
+    <div class="layer-top">
+      <span>MAMBO</span>
+    </div>
+  </div>
+
+  <div id="root"></div>
+
+  <script>
+    const splash = document.getElementById('splash-screen');
+
+    // 1. Balayage diagonal
+    setTimeout(() => {
+      splash.classList.add('swipe-active');
+    }, 1200);
+
+    // 2. Migration du logo + Apparition de l'App
+    setTimeout(() => {
+      splash.classList.add('shrink');
+    }, 2400);
+
+    // 3. On rend le splash "invisible" mais on bloque sur l'UI
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        splash.classList.add('fade-bg');
+        // On retire juste le logo du splash une fois que React a pris le relais
+        setTimeout(() => {
+            const movingLogo = document.getElementById('mambo-moving-logo');
+            if(movingLogo) movingLogo.style.opacity = '0';
+        }, 1500);
+      }, 5000);
+    });
+  </script>
+</body>
+</html>

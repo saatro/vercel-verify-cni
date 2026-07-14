@@ -1,0 +1,13 @@
+.upload-permis .file-inputs {
+  display: flex;
+  gap: 20px;
+}
+
+.upload-permis .preview {
+  margin-top: 10px;
+  width: 150px;
+  height: auto;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  object-fit: contain;
+}

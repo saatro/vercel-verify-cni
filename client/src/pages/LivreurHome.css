@@ -1,0 +1,186 @@
+/* --- COUCHE HUD (AU-DESSUS DU PANNEAU) --- */
+.super-hud-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10; /* Supérieur au panneau blanc (z-10) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Le radar circulaire avec effet de balayage */
+.radar-sweep-fixed {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  background: conic-gradient(
+    from 0deg, 
+    rgba(99, 102, 241, 0.25) 0deg, 
+    transparent 90deg
+  );
+  border-radius: 50%;
+  animation: radar-rotate 4s infinite linear;
+}
+
+/* Le marker qui simule la position du livreur au-dessus du panneau */
+.floating-marker-top {
+  position: absolute;
+  width: 45px;
+  height: 45px;
+  background: white;
+  border-radius: 50%;
+  border: 3px solid #6366f1;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 501;
+  transition: transform 0.3s ease-out;
+}
+
+@keyframes radar-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* On garde tes styles existants pour le reste */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* --- Radar de recherche & HUD --- */
+.super-hud-radar {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  width: 280px;
+  height: 280px;
+  margin-left: -140px;
+  margin-top: -120px;
+  pointer-events: none;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Le cercle qui pulse */
+.radar-ping {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(99, 102, 241, 0) 70%);
+  animation: radar-pulse 2.5s infinite ease-out;
+}
+
+/* Le balayage lumineux */
+.radar-sweep {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 1px solid rgba(99, 102, 241, 0.1);
+  background: conic-gradient(from 0deg, rgba(99, 102, 241, 0.2) 0deg, transparent 90deg);
+  animation: radar-rotate 4s linear infinite;
+}
+
+/* Le marqueur flottant au centre */
+.floating-driver {
+  position: relative;
+  z-index: 10;
+  background: white;
+  padding: 10px;
+  border-radius: 50%;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  border: 3px solid #6366f1;
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* --- Animations --- */
+@keyframes radar-pulse {
+  0% { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@keyframes radar-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* --- Leaflet Overrides (UI Clean) --- */
+.leaflet-container {
+  background: #f8fafc !important;
+}
+
+/* Style des lignes de route (Polyline) */
+.leaflet-interactive {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.3));
+}
+
+/* --- Panel & Bottom Sheet --- */
+.backdrop-blur-xl {
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* Scrollbar invisible pour le panel */
+.h-full.overflow-y-auto::-webkit-scrollbar {
+  display: none;
+}
+.h-full.overflow-y-auto {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* --- Boutons & États --- */
+button:active {
+  transform: scale(0.96);
+}
+
+.animate-pulse-slow {
+  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Effet de brillance sur le bouton principal (Confiance) */
+.btn-trust-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-trust-shine::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(45deg, transparent, rgba(255,255,255,0.2), transparent);
+  transform: rotate(45deg);
+  animation: shine 3s infinite;
+}
+
+@keyframes shine {
+  0% { left: -100%; }
+  20% { left: 100%; }
+  100% { left: 100%; }
+}
+
+/* --- Modal Pass Free --- */
+.modal-enter {
+  animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}

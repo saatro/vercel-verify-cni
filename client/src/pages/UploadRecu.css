@@ -1,0 +1,242 @@
+/* ── Variables & Thème Wave CI (Light Mode) ── */
+:root {
+  --ur-bg: #f4f7fa;           /* Gris très clair bleuté */
+  --ur-surface: #ffffff;      /* Blanc pur pour la carte */
+  --ur-border: #e2e8f0;       /* Bordure douce */
+  --ur-wave: #1da1f2;         /* Bleu Wave (ou utilise #ff7b00 pour l'orange) */
+  --ur-wave-orange: #ff7b00;
+  --ur-emerald: #00c076;      /* Succès */
+  --ur-indigo: #4f46e5;       /* Scan / IA */
+  --ur-text: #1e293b;         /* Texte sombre ardoise */
+  --ur-muted: #64748b;        /* Texte secondaire */
+  --ur-radius: 20px;
+  --ur-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+}
+
+/* ── Layout ── */
+.ur-root {
+  min-height: 100dvh;
+  background: var(--ur-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  position: relative;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Dégradé de fond discret */
+.ur-root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: 
+    radial-gradient(circle at 10% 10%, rgba(29, 161, 242, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 90% 90%, rgba(255, 123, 0, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+/* ── Card Principale (Blanche & Douce) ── */
+.ur-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--ur-surface);
+  border: 1px solid var(--ur-border);
+  border-radius: 28px;
+  padding: 40px 30px;
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  box-shadow: var(--ur-shadow);
+}
+
+/* ── Titres & Badges ── */
+.ur-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ur-wave-orange);
+  background: rgba(255, 123, 0, 0.1);
+  border-radius: 100px;
+  padding: 6px 16px;
+  margin-bottom: 20px;
+}
+
+.ur-title {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--ur-text);
+  margin-bottom: 8px;
+  letter-spacing: -0.03em;
+}
+
+.ur-subtitle {
+  font-size: 0.9rem;
+  color: var(--ur-muted);
+  line-height: 1.5;
+  margin-bottom: 30px;
+}
+
+/* ── Étape 1 : Instructions ── */
+.ur-phone-box {
+  width: 100%;
+  background: #f8fafc;
+  border: 2px solid #f1f5f9;
+  border-radius: var(--ur-radius);
+  padding: 20px;
+  cursor: pointer;
+  margin-bottom: 16px;
+  transition: all 0.2s ease;
+}
+.ur-phone-box:hover { border-color: var(--ur-wave-orange); background: #fff; }
+
+.ur-phone-label { font-size: 11px; font-weight: 700; color: var(--ur-muted); text-transform: uppercase; }
+.ur-phone-num { font-size: 1.4rem; font-weight: 800; color: var(--ur-text); display: block; margin-top: 4px; }
+
+.ur-wave-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 16px;
+  background: #1da1f2; /* Bleu ciel Wave */
+  color: #fff;
+  border-radius: 16px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(29, 161, 242, 0.2);
+}
+
+/* ── Étape 2 : Scan IA (Interface Claire) ── */
+.ur-dropzone {
+  width: 100%;
+  aspect-ratio: 1;
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  border-radius: 24px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-bottom: 20px;
+  transition: all 0.3s ease;
+}
+.ur-dropzone:hover { border-color: var(--ur-wave-orange); background: #f0f9ff; }
+
+.ur-preview { width: 100%; height: 100%; object-fit: cover; }
+
+.ur-scan-line {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 3px;
+  background: var(--ur-wave-orange);
+  box-shadow: 0 0 15px var(--ur-wave-orange);
+  z-index: 10;
+  animation: scanAnim 2.5s infinite ease-in-out;
+}
+
+@keyframes scanAnim {
+  0% { top: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.ur-scanning-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--ur-text);
+  font-weight: 600;
+}
+
+/* ── Status Banner ── */
+.ur-status-banner {
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.ur-status-banner--error { background: #fee2e2; color: #b91c1c; }
+.ur-status-banner--scanning { background: #f0f9ff; color: #0369a1; }
+
+/* ── Boutons d'Action ── */
+.ur-cta {
+  width: 100%;
+  padding: 18px;
+  background: var(--ur-wave-orange);
+  color: #fff;
+  border-radius: 18px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.ur-cta:active { transform: scale(0.98); }
+.ur-cta--disabled { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
+
+/* ── Écran Succès ── */
+.ur-success-ring {
+  width: 70px; height: 70px;
+  background: #ecfdf5;
+  color: var(--ur-emerald);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 15px;
+}
+
+.ur-success-amount { font-size: 2.5rem; font-weight: 900; color: var(--ur-text); margin-bottom: 5px; }
+
+.ur-assistance-card {
+  background: #f0f9ff;
+  border: 1px solid #e0f2fe;
+  padding: 15px;
+  border-radius: 16px;
+  margin: 20px 0;
+}
+.ur-assistance-card p { font-size: 0.8rem; color: #0369a1; margin-bottom: 12px; }
+
+.ur-whatsapp-btn {
+  background: #25d366;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto;
+  cursor: pointer;
+}
+
+.ur-back {
+  position: fixed; top: 20px; left: 20px;
+  background: white; border: 1px solid var(--ur-border);
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+}
+
+/* ── Utils ── */
+.ur-spin { animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.ur-animate-in { animation: fadeIn 0.4s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }

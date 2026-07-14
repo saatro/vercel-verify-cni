@@ -1,0 +1,309 @@
+/* ==========================================================================
+   1. BASE & CONTENEURS
+   ========================================================================== */
+.auth-wrapper {
+  background: #fafafa; /* Fond ultra-léger et moderne */
+  width: 100%;
+  min-height: 100vh;
+  display: grid;
+  margin-top: -70px;
+  place-items: center;
+  padding: 5px 5px;
+  box-sizing: border-box;
+  overflow-y: auto;
+ 
+}
+
+.auth-container {
+  background: #ffffff;
+  width: 100%;
+  
+  max-width: 400px;
+  border-radius: 24px;
+  padding: 20px 20px;
+  box-shadow: 0 8px 13px -5px rgba(248, 248, 248, 0.87), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+  margin-bottom: 3px;
+  border: 1px solid #f1f5f9;
+}
+
+/* ==========================================================================
+   2. EN-TÊTE & TITRES
+   ========================================================================== */
+.auth-header {
+  text-align: center;
+  margin-bottom: 17px;
+}
+
+.logo-circle {
+  width: 44px;
+  height: 44px;
+  background: #e7fcede3;
+  border-radius: 13px;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-header h1 {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.6px;
+}
+
+.auth-header p {
+  font-size: 12px;
+  font-weight: 600;
+  color: #10b981;
+  margin-top: 5px;
+}
+
+/* ==========================================================================
+   3. SYSTÈME D'ONGLETS (Schéma / Google)
+   ========================================================================== */
+.auth-tabs {
+  display: flex;
+  background: #f1f5f9;
+  padding: 3px;
+  border-radius: 12px;
+  margin-bottom: 21px;
+  border: 1px solid #e2e8f0;
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  padding: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tab-btn:hover:not(.active) {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.tab-btn.active {
+  background: #ffffff;
+  color: #10b981;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+/* ==========================================================================
+   4. FORMULAIRES & SAISIES
+   ========================================================================== */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.input-field {
+  position: relative;
+  width: 100%;
+}
+
+.input-field input {
+  width: 100%;
+  padding: 2px 2px 1px 50px !important;
+  box-sizing: border-box;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #0f172a;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+}
+
+.input-field input:focus {
+  outline: none;
+  border-color: #10b981;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+}
+
+.input-field .icon {
+  position: absolute;
+  left: 16px;
+  top: 34%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  transition: color 0.2s ease;
+}
+
+.input-field input:focus + .icon {
+  color: #10b981;
+}
+
+/* ==========================================================================
+   5. INTERFACE DU SCHÉMA (MamboLock)
+   ========================================================================== */
+.pattern-login-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 10px 0;
+}
+
+.lock-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 13px;
+  
+  letter-spacing: 0.3px;
+}
+
+.lock-wrapper {
+  background: #f8fafc;
+  padding: 15px;
+  border-radius: 16px;
+  border: 1px dashed #e2e8f0;
+}
+
+/* ==========================================================================
+   6. BOUTONS D'ACTION
+   ========================================================================== */
+.login-btn {
+  width: 100%;
+  height: 44px;
+  background: #10b981;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.login-btn:hover:not(:disabled) {
+  background: #059669;
+  transform: translateY(-1px);
+}
+
+.login-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Interface dédiée à l'action Google */
+.google-login-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0;
+  text-align: center;
+}
+
+.google-notice {
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.google-action-btn {
+  width: 100%;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #ffffff;
+  color: #334155;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.google-action-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.google-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
+   7. NAVIGATION & PIED DE PAGE
+   ========================================================================== */
+.auth-footer-links {
+  margin-top: 14px;
+  text-align: center;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 3px;
+}
+
+.auth-footer-links p {
+  font-size: 11px;
+  color: #64748b;
+  margin: 0 0 5px 0;
+}
+
+.switch-auth-btn {
+  background: transparent;
+  border: none;
+  color: #10b981;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.switch-auth-btn:hover {
+  color: #059669;
+  text-decoration: underline;
+}
+
+.back-btn-float {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  width: 42px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  transition: all 0.2s ease;
+}
+
+.back-btn-float:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}

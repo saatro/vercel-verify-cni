@@ -1,0 +1,160 @@
+/* --- Nouveaux Boutons d'Action --- */
+
+.btn-delivered-manual {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #10b981; /* Vert Émeraude */
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn-delivered-manual:hover {
+  background-color: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(16, 185, 129, 0.3);
+}
+
+.btn-delivered-manual:active {
+  transform: scale(0.95);
+}
+
+/* Bouton Supprimer (Corbeille) */
+.log-btn.text-red-500 {
+  color: #ef4444;
+  background: #fee2e2;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid #fecaca;
+  transition: all 0.2s;
+}
+
+.log-btn.text-red-500:hover {
+  background: #f87171;
+  color: white;
+  transform: rotate(10deg);
+}
+
+/* --- Badges et Indicateurs --- */
+
+.delivery-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #eff6ff;
+  color: #3b82f6;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #dbeafe;
+}
+
+.animate-pulse {
+  animation: pulse-light 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-light {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* --- Amélioration des Cartes de Commande --- */
+
+.m-order-card {
+  background: white;
+  border-radius: 18px;
+  padding: 16px;
+  margin-bottom: 15px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.m-order-card:active {
+  transform: scale(0.98);
+}
+
+.order-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.status-tag {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 8px;
+  letter-spacing: 0.5px;
+}
+
+/* Couleurs des Status */
+.status-tag.paye { background: #dcfce7; color: #15803d; }
+.status-tag.preparation { background: #fef9c3; color: #a16207; }
+.status-tag.pickup { background: #e0f2fe; color: #0369a1; }
+.status-tag.delivered { background: #f1f5f9; color: #64748b; }
+
+/* --- Bouton de Validation Manuelle (Initial) --- */
+.btn-validate {
+  background: #1e293b;
+  color: white;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-validate:hover {
+  background: #000;
+  transform: scale(1.05);
+}
+
+/* --- Onglets de Filtrage --- */
+.m-filter-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  background: #f1f5f9;
+  padding: 5px;
+  border-radius: 14px;
+}
+
+.filter-btn-active {
+  flex: 1;
+  background: white;
+  color: #1e293b;
+  border: none;
+  padding: 10px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.filter-btn-inactive {
+  flex: 1;
+  background: transparent;
+  color: #64748b;
+  border: none;
+  padding: 10px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+}

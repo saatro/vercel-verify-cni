@@ -1,0 +1,3091 @@
+Gemini
+Conversation avec Gemini
+mes pages existe déja ,aide moi à les corriger,,demande juste les page à corriger pour y parvenir/je veux que l'inscription du livreur lui génère automatiquement 50 jetons gratuite pour lui permettre de recevoir des commandes ,,et une fois les jetons bonus terminer ,se recharger....
+
+C'est une excellente fonctionnalité pour encourager l'inscription des livreurs !
+
+Pour vous aider à corriger vos pages et intégrer cette logique de jetons bonus (50 jetons gratuits) et le mécanisme de rechargement, veuillez me préciser les pages que vous souhaitez corriger.
+
+Quelles sont les pages ou les sections spécifiques qui gèrent :
+
+L'inscription du livreur (là où le bonus doit être attribué) ?
+
+Le profil du livreur ou la base de données (là où le solde de jetons est stocké) ?
+
+Le traitement de la commande (là où les jetons sont déduits) ?
+
+La page ou la section de rechargement/paiement des jetons ?
+
+Dites-moi quelles pages sont concernées pour que je puisse vous aider avec le code ou la logique.
+
+toutes les pages que tu pense necessaire
+
+Pour mettre en place la logique des jetons, nous devrons probablement toucher à trois ou quatre zones clés de votre application.
+
+Voici les pages (ou les composants/fonctions) que je pense nécessaires de vérifier et de corriger :
+
+1. Inscription du Livreur (Lieu d'attribution du bonus)
+C'est la page principale où le compte du livreur est créé.
+
+Pages/Fichiers à corriger :
+
+Le script de traitement de l'inscription (souvent un fichier PHP, Python, ou une fonction de votre API/backend, par exemple : register_driver.php, DriverController.js, etc.).
+
+Correction/Logique à ajouter : Une fois l'utilisateur créé dans la base de données, une instruction doit définir le solde de jetons initial à 50.
+
+2. Base de Données (Stockage du solde)
+Nous devons nous assurer que votre table de livreurs a la colonne nécessaire pour stocker le solde de jetons.
+
+Composant à vérifier :
+
+Le schéma de votre table Livreurs ou Drivers.
+
+Correction/Logique à ajouter : Vérifiez qu'il existe une colonne comme tokens_balance (entier) pour enregistrer le nombre de jetons restants.
+
+3. Réception de Commandes (Lieu de la déduction)
+C'est le mécanisme qui permet à un livreur de recevoir une commande. Avant de lui attribuer la commande, le système doit vérifier s'il a au moins 1 jeton et en déduire un.
+
+Pages/Fichiers à corriger :
+
+Le script de gestion des commandes ou de l'API de dispatching (par exemple : order_dispatch_handler.php, process_order.py, etc.).
+
+Correction/Logique à ajouter :
+
+Vérification : Si tokens_balance du livreur est $ > 0$.
+
+Déduction : Si la vérification est OK, mettre à jour tokens_balance = tokens_balance - 1.
+
+Refus : Si tokens_balance est $ = 0$, le livreur ne peut pas recevoir la commande (ou doit être redirigé vers la page de rechargement).
+
+4. Rechargement des Jetons (Le mécanisme de paiement)
+La page où le livreur peut acheter plus de jetons.
+
+Pages/Fichiers à corriger :
+
+La page de rechargement ou de paiement (par exemple : buy_tokens.html/php).
+
+Le script de traitement du paiement/rechargement.
+
+Correction/Logique à ajouter : Après un paiement réussi, mettre à jour tokens_balance = tokens_balance + [nombre de jetons achetés].
+
+Pour commencer, concentrons-nous sur le point 1 (Inscription) et le point 2 (Base de données).
+
+Veuillez me montrer le code ou la structure de la page/fonction qui gère l'Inscription d'un nouveau livreur afin que nous puissions y insérer l'attribution des 50 jetons gratuits.
+
+// src/components/FormInscription.js
+
+import { GoogleLogin } from "@react-oauth/google";
+
+import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, signInWithCredential } from "firebase/auth";
+
+import { doc, setDoc } from "firebase/firestore";
+
+import { useEffect, useState } from "react";
+
+import { useNavigate } from "react-router-dom";
+
+import { auth, db } from "../firebase";
+
+import "./FormInscription.css";
+
+
+
+export default function FormInscription({ role = "client" }) {
+
+  const navigate = useNavigate();
+
+  const [form, setForm] = useState({ nom: "", email: "", motdepasse: "", telephone: "", permis: "" });
+
+  const [loading, setLoading] = useState(false);
+
+  const [errorMsg, setErrorMsg] = useState("");
+
+
+
+  useEffect(() => {
+
+    const unsub = onAuthStateChanged(auth, (user) => {
+
+      if (user) navigate(role === "client" ? "/PageCommandeClient" : "/livreur-home");
+
+    });
+
+    return () => unsub();
+
+  }, [navigate, role]);
+
+
+
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+
+
+  const handleSubmit = async (e) => {
+
+    e.preventDefault();
+
+    setLoading(true);
+
+    setErrorMsg("");
+
+    try {
+
+      const cred = await createUserWithEmailAndPassword(auth, form.email, form.motdepasse);
+
+      const user = cred.user;
+
+      await setDoc(doc(db, role === "client" ? "clients" : "livreurs", user.uid), {
+
+        uid: user.uid,
+
+        nom: form.nom,
+
+        email: form.email,
+
+        telephone: form.telephone || "",
+
+        permis: role === "livreur" ? form.permis : "",
+
+        role,
+
+        createdAt: new Date(),
+
+      });
+
+      navigate(role === "client" ? "/clienthome" : "/livreur-home");
+
+    } catch (err) {
+
+      console.error(err);
+
+      if (err.code === "auth/email-already-in-use") {
+
+        setErrorMsg("Cet email est déjà utilisé. Vous pouvez vous connecter.");
+
+      } else {
+
+        setErrorMsg(err.message);
+
+      }
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
+  };
+
+
+
+  const handleGoogle = async (res) => {
+
+    setLoading(true);
+
+    setErrorMsg("");
+
+    try {
+
+      const credential = GoogleAuthProvider.credential(res.credential);
+
+      const userCred = await signInWithCredential(auth, credential);
+
+      const user = userCred.user;
+
+      await setDoc(doc(db, role === "client" ? "clients" : "livreurs", user.uid), {
+
+        uid: user.uid,
+
+        nom: user.displayName || "",
+
+        email: user.email || "",
+
+        telephone: user.phoneNumber || "",
+
+        role,
+
+        createdAt: new Date(),
+
+      }, { merge: true });
+
+      navigate(role === "client" ? "/clienthome" : "/livreur-home");
+
+    } catch (err) {
+
+      console.error(err);
+
+      setErrorMsg("Connexion Google échouée");
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
+  };
+
+
+
+  return (
+
+    <div className="inscription-page">
+
+      <h1>Inscription {role === "client" ? "Client" : "Livreur"}</h1>
+
+
+
+      {errorMsg && <p className="error">{errorMsg}</p>}
+
+
+
+      <form className="form" onSubmit={handleSubmit}>
+
+        <label>Nom
+
+          <input name="nom" value={form.nom} onChange={handleChange} required />
+
+        </label>
+
+
+
+        <label>Email
+
+          <input name="email" type="email" value={form.email} onChange={handleChange} required />
+
+        </label>
+
+
+
+        <label>Téléphone
+
+          <input name="telephone" value={form.telephone} onChange={handleChange} required />
+
+        </label>
+
+
+
+        {role === "livreur" && (
+
+          <label>Numéro permis
+
+            <input name="permis" value={form.permis} onChange={handleChange} required />
+
+          </label>
+
+        )}
+
+
+
+        <label>Mot de passe
+
+          <input name="motdepasse" type="password" value={form.motdepasse} onChange={handleChange} required />
+
+        </label>
+
+
+
+        <button type="submit" disabled={loading}>{loading ? "Chargement..." : "S'inscrire"}</button>
+
+      </form>
+
+
+
+      <div className="google-wrap">
+
+        <GoogleLogin onSuccess={handleGoogle} onError={() => setErrorMsg("Connexion Google échouée")} />
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+Absolument ! Le fichier // src/components/FormInscription.js est l'endroit parfait pour attribuer les 50 jetons gratuits au livreur lors de son inscription.
+
+Nous devons modifier les deux fonctions d'inscription (handleSubmit pour l'email/mot de passe et handleGoogle pour Google) pour vérifier si le rôle est "livreur" et ajouter le champ tokens_balance: 50 à l'objet que nous enregistrons dans Firestore.
+
+Voici les corrections à apporter (les lignes modifiées/ajoutées sont mises en évidence) :
+
+🛠️ Corrections dans FormInscription.js
+1. Fonction handleSubmit (Inscription Email/Mot de passe)
+Modifiez la fonction handleSubmit dans la section où vous utilisez setDoc :
+
+JavaScript
+// ... (code précédent)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, form.email, form.motdepasse);
+      const user = cred.user;
+          
+      // Préparation des données à sauvegarder dans Firestore
+      const userData = {
+        uid: user.uid,
+        nom: form.nom,
+        email: form.email,
+        telephone: form.telephone || "",
+        permis: role === "livreur" ? form.permis : "",
+        role,
+        createdAt: new Date(),
+      };
+
+      // ⭐ LOGIQUE D'ATTRIBUTION DES JETONS GRATUITS
+      if (role === "livreur") {
+        userData.tokens_balance = 50; // Attribution de 50 jetons bonus
+      }
+
+      await setDoc(doc(db, role === "client" ? "clients" : "livreurs", user.uid), userData);
+          
+      navigate(role === "client" ? "/clienthome" : "/livreur-home");
+// ... (reste du code)
+Explication : Nous créons un objet userData avec toutes les informations. Si le role est "livreur", nous ajoutons simplement la propriété tokens_balance: 50 à cet objet avant de l'enregistrer dans la base de données (setDoc).
+
+2. Fonction handleGoogle (Inscription Google)
+Modifiez la fonction handleGoogle de la même manière pour les inscriptions via Google :
+
+JavaScript
+// ... (code précédent)
+
+  const handleGoogle = async (res) => {
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      const credential = GoogleAuthProvider.credential(res.credential);
+      const userCred = await signInWithCredential(auth, credential);
+      const user = userCred.user;
+      
+      // Préparation des données à sauvegarder dans Firestore
+      const userData = {
+        uid: user.uid,
+        nom: user.displayName || "",
+        email: user.email || "",
+        telephone: user.phoneNumber || "",
+        role,
+        createdAt: new Date(),
+      };
+
+      // ⭐ LOGIQUE D'ATTRIBUTION DES JETONS GRATUITS
+      if (role === "livreur") {
+        userData.tokens_balance = 50; // Attribution de 50 jetons bonus
+      }
+
+      await setDoc(doc(db, role === "client" ? "clients" : "livreurs", user.uid), userData, { merge: true });
+      navigate(role === "client" ? "/clienthome" : "/livreur-home");
+// ... (reste du code)
+✅ Prochaine Étape : Déduction des Jetons
+Maintenant que le solde de jetons est attribué à l'inscription, nous devons implémenter la déduction lorsqu'un livreur accepte ou reçoit une commande.
+
+Veuillez me montrer le code de la page ou de la fonction qui gère :
+
+La récupération des commandes disponibles par le livreur.
+
+L'acceptation (ou l'attribution) d'une commande au livreur.
+
+C'est là que nous allons vérifier tokens_balance > 0 et le décrémenter.
+
+in clure images de permis de conduire.recto et verso
+
+C'est une excellente idée d'exiger une preuve du permis de conduire pour l'inscription des livreurs, surtout pour des raisons de vérification et de conformité.
+
+Comme vous utilisez Firebase Firestore pour stocker les données de l'utilisateur, l'approche standard consiste à utiliser Firebase Storage pour stocker les images elles-mêmes (recto et verso), et à stocker les liens de ces images dans Firestore.
+
+Nous allons modifier FormInscription.js pour :
+
+Ajouter deux champs de fichier (input type="file") pour le recto et le verso du permis.
+
+Mettre à jour la fonction handleSubmit pour téléverser (uploader) ces fichiers sur Firebase Storage avant de sauvegarder les informations dans Firestore.
+
+🛠️ Corrections dans FormInscription.js
+1. Imports et State (Ajouter Firebase Storage)
+Ajoutez la référence à Firebase Storage dans vos imports et mettez à jour le useState pour gérer les fichiers.
+
+JavaScript
+// src/components/FormInscription.js
+import { GoogleLogin } from "@react-oauth/google";
+// ... (autres imports Firebase)
+import { doc, setDoc } from "firebase/firestore";
+// ⭐ Importer Storage
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { useEffect, useState } from "react";
+// ... (autres imports)
+import { auth, db, storage } from "../firebase"; // Assurez-vous d'avoir 'storage' dans votre fichier firebase.js
+import "./FormInscription.css";
+
+export default function FormInscription({ role = "client" }) {
+  const navigate = useNavigate();
+  
+  // Mettre à jour le state pour inclure les fichiers du permis
+  const [form, setForm] = useState({ nom: "", email: "", motdepasse: "", telephone: "", permis: "" });
+  const [permisRectoFile, setPermisRectoFile] = useState(null); // ⭐ NOUVEAU
+  const [permisVersoFile, setPermisVersoFile] = useState(null); // ⭐ NOUVEAU
+  
+// ... (reste du code)
+2. Gestion des Fichiers dans handleChange
+Ajoutons une fonction spécifique pour gérer les changements des inputs de type file.
+
+JavaScript
+// ... (code précédent dans FormInscription.js)
+
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  // ⭐ NOUVELLE FONCTION POUR GÉRER LES FICHIERS
+  const handleFileChange = (e, side) => {
+    if (e.target.files[0]) {
+      if (side === "recto") {
+        setPermisRectoFile(e.target.files[0]);
+      } else if (side === "verso") {
+        setPermisVersoFile(e.target.files[0]);
+      }
+    }
+  };
+
+// ... (code précédent dans FormInscription.js)
+3. Fonction uploadPermis (Téléversement sur Storage)
+Nous allons créer une fonction utilitaire pour gérer l'upload des fichiers sur Firebase Storage.
+
+JavaScript
+// ... (code précédent dans FormInscription.js)
+
+  // ⭐ NOUVELLE FONCTION POUR UPLOADER LES FICHIERS
+  const uploadPermis = async (file, uid, side) => {
+    if (!file) return null;
+
+    // Chemin de stockage : 'drivers_permis/[UID de l'utilisateur]/[recto/verso]'
+    const storageRef = ref(storage, `drivers_permis/${uid}/${side}`);
+    
+    await uploadBytes(storageRef, file);
+    return getDownloadURL(storageRef);
+  };
+
+  const handleSubmit = async (e) => {
+// ... (suite dans la section 4)
+4. Mise à jour de handleSubmit (Upload et Firestore Save)
+Mettez à jour handleSubmit pour téléverser les fichiers et enregistrer les URLs générées dans Firestore.
+
+JavaScript
+// ... (code précédent dans FormInscription.js)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg("");
+    
+    // ⭐ Vérification des fichiers permis pour les livreurs
+    if (role === "livreur" && (!permisRectoFile || !permisVersoFile)) {
+      setErrorMsg("Veuillez fournir le recto et le verso de votre permis de conduire.");
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, form.email, form.motdepasse);
+      const user = cred.user;
+      
+      let permisRectoURL = "";
+      let permisVersoURL = "";
+      
+      // ⭐ UPLOAD DES FICHIERS ET RÉCUPÉRATION DES URLS
+      if (role === "livreur") {
+        permisRectoURL = await uploadPermis(permisRectoFile, user.uid, "recto");
+        permisVersoURL = await uploadPermis(permisVersoFile, user.uid, "verso");
+      }
+      
+      const userData = {
+        uid: user.uid,
+        nom: form.nom,
+        email: form.email,
+        telephone: form.telephone || "",
+        permis: role === "livreur" ? form.permis : "",
+        role,
+        createdAt: new Date(),
+        tokens_balance: role === "livreur" ? 50 : 0, // 50 jetons si livreur, 0 sinon
+      };
+      
+      // ⭐ Ajout des URLs des images de permis
+      if (role === "livreur") {
+        userData.permis_recto_url = permisRectoURL;
+        userData.permis_verso_url = permisVersoURL;
+      }
+
+      await setDoc(doc(db, role === "client" ? "clients" : "livreurs", user.uid), userData);
+      navigate(role === "client" ? "/clienthome" : "/livreur-home");
+// ... (reste du code)
+5. Ajout des Champs de Fichier dans le return (HTML)
+Ajoutez les champs de fichier dans la section réservée aux livreurs dans votre JSX :
+
+JavaScript
+// ... (code précédent dans FormInscription.js - dans la balise <form>)
+
+        {role === "livreur" && (
+          <>
+            <label>Numéro permis
+              <input name="permis" value={form.permis} onChange={handleChange} required />
+            </label>
+
+            {/* ⭐ CHAMPS D'UPLOAD DES FICHIERS PERMIS */}
+            <label>Permis de conduire (Recto)
+              <input type="file" onChange={(e) => handleFileChange(e, "recto")} required />
+            </label>
+
+            <label>Permis de conduire (Verso)
+              <input type="file" onChange={(e) => handleFileChange(e, "verso")} required />
+            </label>
+          </>
+        )}
+
+// ... (reste du code)
+🛑 Action Requise : Configuration de Firebase
+Pour que cela fonctionne, vous devez vous assurer de deux choses :
+
+Fichier firebase.js : Votre fichier de configuration Firebase (où vous exportez auth et db) doit également exporter l'instance de Storage :
+
+JavaScript
+import { getStorage } from "firebase/storage";
+// ...
+const storage = getStorage(app);
+// ...
+export { auth, db, storage };
+Règles de Sécurité de Storage : Vous devez définir les règles de sécurité dans la console Firebase pour permettre l'upload dans le dossier drivers_permis/[UID].
+
+Après avoir intégré ces changements, l'inscription du livreur générera :
+
+Un compte avec tokens_balance: 50.
+
+Un enregistrement avec les champs permis_recto_url et permis_verso_url.
+
+Passons maintenant à la déduction des jetons ! Quel est le fichier qui gère l'acceptation d'une commande par le livreur ?
+
+propose moi le fichier et je t'envoi l'équivalent chez moi
+
+Excellent. Pour implémenter la logique de déduction des jetons, le fichier clé est celui qui gère la relation entre le livreur et la commande, généralement une fonction côté backend ou API (car c'est une action critique qui modifie le solde et la commande).
+
+Je pense que ce fichier pourrait s'appeler :
+
+accept_order.js (si vous utilisez Node.js/Firebase Functions)
+
+OrderController.php (si vous utilisez PHP)
+
+LivreurAcceptationCommande.js ou handleAcceptOrder.js
+
+Ce fichier contient la logique qui s'exécute lorsque le livreur clique sur "Accepter" une nouvelle commande.
+
+Veuillez m'envoyer le code de votre fichier qui gère l'action suivante :
+
+Quand un livreur accepte une commande, quelles étapes de code sont exécutées pour lier cette commande à son profil ?
+
+// src/pages/GestionJetons.jsx
+
+// PAGE COMPLETE - VERSION UPGRADÉE
+
+// Map au-dessus + container chevauchant (style inspiré ClientHome)
+
+// Mobile first (colonne) -> Desktop (row)
+
+
+
+import { collection, onSnapshot, updateDoc, doc, increment } from "firebase/firestore";
+
+import { useEffect, useMemo, useState } from "react";
+
+import { db } from "../firebase";
+
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+
+import "leaflet/dist/leaflet.css";
+
+import L from "leaflet";
+
+import SideMenu from "../components/SideMenu";
+
+import "./GestionJetons.css";
+
+
+
+// ===== Fix icônes Leaflet =====
+
+delete L.Icon.Default.prototype._getIconUrl;
+
+L.Icon.Default.mergeOptions({
+
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+
+});
+
+
+
+const DEFAULT_CENTER = [5.3411, -4.0286];
+
+
+
+export default function GestionJetons() {
+
+  const [users, setUsers] = useState([]);
+
+  const [selectedUser, setSelectedUser] = useState(null);
+
+  const [search, setSearch] = useState("");
+
+  const [loading, setLoading] = useState(false);
+
+  const [stats, setStats] = useState({ total: 0, totalJetons: 0 });
+
+
+
+  // ===== Realtime users =====
+
+  useEffect(() => {
+
+    const unsub = onSnapshot(collection(db, "users"), (snap) => {
+
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      setUsers(list);
+
+
+
+      const totalJetons = list.reduce((sum, u) => sum + (u.jetons || 0), 0);
+
+      setStats({ total: list.length, totalJetons });
+
+    });
+
+
+
+    return () => unsub();
+
+  }, []);
+
+
+
+  // ===== Filter =====
+
+  const filteredUsers = useMemo(() => {
+
+    return users.filter((u) =>
+
+      (u.name || "").toLowerCase().includes(search.toLowerCase()) ||
+
+      (u.email || "").toLowerCase().includes(search.toLowerCase())
+
+    );
+
+  }, [users, search]);
+
+
+
+  const getUserPosition = (u) => {
+
+    const lat = parseFloat(u.latitude || u.lat);
+
+    const lng = parseFloat(u.longitude || u.lng);
+
+    if (isNaN(lat) || isNaN(lng)) return DEFAULT_CENTER;
+
+    return [lat, lng];
+
+  };
+
+
+
+  const updateTokens = async (userId, value) => {
+
+    try {
+
+      setLoading(true);
+
+      const ref = doc(db, "users", userId);
+
+      await updateDoc(ref, { jetons: increment(value) });
+
+    } catch (e) {
+
+      console.error(e);
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
+  };
+
+
+
+  const bulkAdd = async (value) => {
+
+    try {
+
+      setLoading(true);
+
+      for (const u of filteredUsers) {
+
+        const ref = doc(db, "users", u.id);
+
+        await updateDoc(ref, { jetons: increment(value) });
+
+      }
+
+    } catch (e) {
+
+      console.error(e);
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
+  };
+
+
+
+  return (
+
+    <div className="gestion-jetons-page">
+
+      <SideMenu />
+
+
+
+      <div className="gestion-jetons-wrapper">
+
+        {/* ===== MAP ===== */}
+
+        <div className="gj-map-zone">
+
+          <MapContainer center={DEFAULT_CENTER} zoom={13} scrollWheelZoom className="gj-map">
+
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+
+
+
+            {users.map((u) => (
+
+              <Marker key={u.id} position={getUserPosition(u)}>
+
+                <Popup>
+
+                  <strong>{u.name || "Utilisateur"}</strong>
+
+                  <br />Jetons : {u.jetons ?? 0}
+
+                </Popup>
+
+              </Marker>
+
+            ))}
+
+          </MapContainer>
+
+        </div>
+
+
+
+        {/* ===== CONTAINER ===== */}
+
+        <div className="gj-container">
+
+          <div className="gj-card">
+
+            <h2>Gestion des jetons</h2>
+
+            <p className="gj-desc">
+
+              Cette page (menu Admin) permet d’ajouter ou retirer des jetons aux
+
+              utilisateurs en temps réel, de visualiser leur position sur la carte
+
+              et de gérer des opérations en masse.
+
+            </p>
+
+
+
+            {/* Stats */}
+
+            <div className="gj-stats">
+
+              <div className="gj-stat">
+
+                <span>Utilisateurs</span>
+
+                <b>{stats.total}</b>
+
+              </div>
+
+              <div className="gj-stat">
+
+                <span>Jetons totaux</span>
+
+                <b>{stats.totalJetons}</b>
+
+              </div>
+
+            </div>
+
+
+
+            {/* Search */}
+
+            <input
+
+              className="gj-search"
+
+              placeholder="Rechercher par nom ou email…"
+
+              value={search}
+
+              onChange={(e) => setSearch(e.target.value)}
+
+            />
+
+
+
+            {/* Bulk actions */}
+
+            <div className="gj-bulk">
+
+              <button disabled={loading} onClick={() => bulkAdd(10)}>+10 (filtrés)</button>
+
+              <button disabled={loading} onClick={() => bulkAdd(-10)} className="danger">
+
+                -10 (filtrés)
+
+              </button>
+
+            </div>
+
+
+
+            {/* List */}
+
+            <div className="gj-list">
+
+              {filteredUsers.map((u) => (
+
+                <div
+
+                  key={u.id}
+
+                  className={`gj-user ${selectedUser?.id === u.id ? "active" : ""}`}
+
+                  onClick={() => setSelectedUser(u)}
+
+                >
+
+                  <div className="gj-user-info">
+
+                    <strong>{u.name || "Sans nom"}</strong>
+
+                    <span>{u.email}</span>
+
+                  </div>
+
+
+
+                  <div className="gj-user-actions">
+
+                    <span className="gj-badge">{u.jetons ?? 0}</span>
+
+                    <button
+
+                      disabled={loading}
+
+                      onClick={(e) => {
+
+                        e.stopPropagation();
+
+                        updateTokens(u.id, +10);
+
+                      }}
+
+                    >
+
+                      +10
+
+                    </button>
+
+                    <button
+
+                      disabled={loading || (u.jetons ?? 0) <= 0}
+
+                      className="danger"
+
+                      onClick={(e) => {
+
+                        e.stopPropagation();
+
+                        updateTokens(u.id, -10);
+
+                      }}
+
+                    >
+
+                      -10
+
+                    </button>
+
+                  </div>
+
+                </div>
+
+              ))}
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+Merci pour ce code. Cependant, le fichier GestionJetons.jsx que vous avez partagé semble être une page d'administration destinée à permettre aux administrateurs de gérer (ajouter ou retirer) manuellement les jetons des utilisateurs.
+
+Cette page n'est PAS la fonction qui s'exécute automatiquement lorsque :
+
+Un client passe une nouvelle commande.
+
+Un livreur accepte cette commande.
+
+Pour implémenter la déduction automatique des jetons, nous avons besoin de la fonction qui gère l'Acceptation de Commande par un livreur.
+
+Puisque vous utilisez React et Firebase Firestore, cette logique se trouve probablement dans :
+
+Le composant de l'interface livreur (par exemple, LivreurHome.jsx ou OrderCard.jsx) où le bouton "Accepter la commande" est cliqué.
+
+Une fonction Firebase Cloud Function qui est appelée par le client après le clic.
+
+🔍 Fichier à Rechercher
+Veuillez rechercher le fichier qui contient la fonction (souvent appelée handleAcceptOrder ou acceptOrder) qui fait les actions suivantes dans Firestore :
+
+Met à jour le statut de la commande à "Acceptée" ou "En cours".
+
+Ajoute l'ID du livreur à la commande.
+
+Si vous n'êtes pas sûr, essayez de m'envoyer le code de la page "livreur-home" (/livreur-home) ou la page qui liste les commandes disponibles.
+
+Dès que vous me fournirez cette fonction, nous pourrons y ajouter la logique de déduction :
+
+Vérifier si le solde du livreur (tokens_balance) est $ > 0$.
+
+Si oui, décrémenter le solde (par exemple, de 1 jeton).
+
+Si non, refuser l'acceptation et afficher un message d'erreur.
+
+import { collection, doc, getDocs, getFirestore, query, updateDoc, where } from 'firebase/firestore';
+
+import { getFunctions, httpsCallable } from 'firebase/functions';
+
+import { useEffect, useState } from 'react';
+
+import SideMenu from "../components/SideMenu";
+
+import { app } from '../firebase'; // Assurez-vous d'avoir le chemin correct vers votre init Firebase
+
+import './ValidationRecus.css'; // Nous allons créer ce CSS après
+
+
+
+export default function ValidationReçus() {
+
+    const [transactions, setTransactions] = useState([]);
+
+    const [loading, setLoading] = useState(true);
+
+    const [callingIA, setCallingIA] = useState(null); // ID de la transaction en cours d'analyse
+
+
+
+    const db = getFirestore(app);
+
+    const functions = getFunctions(app);
+
+    // Crée l'objet pour appeler la fonction Cloud
+
+    const verifyReceipt = httpsCallable(functions, 'verifierReçu');
+
+
+
+    useEffect(() => {
+
+        // Charger les transactions avec le statut 'PENDING'
+
+        const fetchPendingTransactions = async () => {
+
+            setLoading(true);
+
+            try {
+
+                // Requête pour les transactions qui n'ont pas encore été traitées
+
+                const q = query(
+
+                    collection(db, 'pending_deposits'),
+
+                    where('status', '==', 'PENDING')
+
+                );
+
+                const querySnapshot = await getDocs(q);
+
+
+
+                const fetchedTransactions = querySnapshot.docs.map(doc => ({
+
+                    id: doc.id,
+
+                    ...doc.data()
+
+                }));
+
+
+
+                setTransactions(fetchedTransactions);
+
+            } catch (error) {
+
+                console.error("Erreur lors du chargement des transactions:", error);
+
+            } finally {
+
+                setLoading(false);
+
+            }
+
+        };
+
+
+
+        fetchPendingTransactions();
+
+    }, [db]);
+
+
+
+    // --- Fonction pour appeler l'analyse Google Vision ---
+
+    const handleAnalyzeReceipt = async (transactionId) => {
+
+        setCallingIA(transactionId);
+
+        try {
+
+            // Appel à la Cloud Function "verifierReçu"
+
+            const result = await verifyReceipt({ transactionId });
+
+
+
+            alert(`Analyse IA pour ${transactionId} terminée : ${result.data.iaStatus}.`);
+
+
+
+            // Mettre à jour l'état local du tableau pour refléter le statut IA
+
+            setTransactions(prev =>
+
+                prev.map(t =>
+
+                    t.id === transactionId
+
+                        ? { ...t, iaStatus: result.data.iaStatus, iaDetails: result.data.message }
+
+                        : t
+
+                )
+
+            );
+
+
+
+        } catch (error) {
+
+            console.error("Erreur lors de l'appel IA:", error);
+
+            alert(`Échec de l'analyse IA : ${error.message}`);
+
+        } finally {
+
+            setCallingIA(null);
+
+        }
+
+    };
+
+
+
+    // --- Fonction pour valider manuellement (ou confirmer) le dépôt ---
+
+    const handleManualValidation = async (transactionId, userId, amount) => {
+
+        if (!window.confirm(`Confirmer la validation du dépôt de ${amount} jetons pour l'utilisateur ${userId} ?`)) {
+
+            return;
+
+        }
+
+
+
+        try {
+
+            // Mettre à jour le statut du dépôt à 'VERIFIED'
+
+            await updateDoc(doc(db, 'pending_deposits', transactionId), {
+
+                status: 'VERIFIED',
+
+                adminId: 'Votre_Admin_ID', // Remplacez par l'ID de l'administrateur
+
+                validationDate: new Date()
+
+            });
+
+
+
+            // LOGIQUE CRÉDIT : Vous devrez avoir ici une autre Cloud Function pour créditer
+
+            // le solde de l'utilisateur de manière sécurisée (Transaction Firestore).
+
+
+
+            alert(`Dépôt ${transactionId} validé. L'utilisateur a été crédité.`);
+
+
+
+            // Supprimer la transaction du tableau local
+
+            setTransactions(prev => prev.filter(t => t.id !== transactionId));
+
+
+
+        } catch (error) {
+
+            console.error("Erreur de validation manuelle:", error);
+
+            alert("Erreur lors de la validation du dépôt.");
+
+        }
+
+    };
+
+
+
+    // --- Affichage du statut IA ---
+
+    const getIAStatusTag = (status) => {
+
+        switch (status) {
+
+            case 'VERIFIED':
+
+                return <span className="tag ia-verified">✅ OK</span>;
+
+            case 'REJECTED':
+
+                return <span className="tag ia-rejected">❌ Refusé</span>;
+
+            case 'ERROR':
+
+                return <span className="tag ia-error">⚠️ Erreur</span>;
+
+            default:
+
+                return <span className="tag ia-pending">...</span>;
+
+        }
+
+    };
+
+
+
+    if (loading) {
+
+        return <p>Chargement des dépôts en attente...</p>;
+
+    }
+
+
+
+    return (
+
+        <div className="validation-page">
+
+            <SideMenu />
+
+            <div className="validation-content">
+
+                <h2>🔍 Validation des Reçus (Jetons)</h2>
+
+
+
+                {transactions.length === 0 ? (
+
+                    <p className="no-data">Aucun reçu en attente de validation.</p>
+
+                ) : (
+
+                    <table className="validation-table">
+
+                        <thead>
+
+                            <tr>
+
+                                <th>ID Trans.</th>
+
+                                <th>Utilisateur (ID)</th>
+
+                                <th>Montant Attendu</th>
+
+                                <th>Statut IA</th>
+
+                                <th>Reçu</th>
+
+                                <th>Actions</th>
+
+                            </tr>
+
+                        </thead>
+
+                        <tbody>
+
+                            {transactions.map((t) => (
+
+                                <tr key={t.id}>
+
+                                    <td>{t.id.substring(0, 8)}...</td>
+
+                                    <td>{t.userId.substring(0, 8)}...</td>
+
+                                    <td>{t.amount} Jetons</td>
+
+                                    <td>{getIAStatusTag(t.iaStatus)}</td>
+
+                                    <td>
+
+                                        <a href={t.receiptUrl} target="_blank" rel="noopener noreferrer">Voir le reçu</a>
+
+                                    </td>
+
+                                    <td>
+
+                                        <button
+
+                                            className="btn-ia-check"
+
+                                            onClick={() => handleAnalyzeReceipt(t.id)}
+
+                                            disabled={callingIA === t.id || t.iaStatus === 'VERIFIED'}
+
+                                        >
+
+                                            {callingIA === t.id ? 'Analyse...' : 'Lancer l\'IA'}
+
+                                        </button>
+
+                                        <button
+
+                                            className="btn-validate"
+
+                                            onClick={() => handleManualValidation(t.id, t.userId, t.amount)}
+
+                                        >
+
+                                            Valider
+
+                                        </button>
+
+                                    </td>
+
+                                </tr>
+
+                            ))}
+
+                        </tbody>
+
+                    </table>
+
+                )}
+
+            </div>
+
+        </div>
+
+    );
+
+}
+
+Merci d'avoir partagé ce code.
+
+Le fichier ValidationRecus.jsx est une page pour les administrateurs qui gère la validation des dépôts (rechargements) de jetons effectués par les utilisateurs. Il ne gère pas l'acceptation des commandes par les livreurs.
+
+Puisque l'opération de déduction de jetons est une modification critique de la base de données, elle devrait idéalement se faire :
+
+Soit dans un fichier côté client (React) s'il y a un composant dédié à l'acceptation des commandes sur le tableau de bord du livreur.
+
+Soit, de manière plus sécurisée et professionnelle, via une Cloud Function Firebase (comme vous utilisez httpsCallable dans votre autre fichier) qui gère à la fois la vérification du solde et la déduction.
+
+🎯 Proposition : Le composant LivreurHome.jsx ou OrderCard.jsx
+Étant donné votre structure, il est très probable que vous ayez une page ou un composant qui affiche les commandes disponibles pour les livreurs. Appelons-le LivreurHome.jsx ou un composant enfant comme OrderCard.jsx.
+
+Ce fichier doit contenir une fonction comme handleAcceptOrder(orderId, driverId) (ou similaire) qui est déclenchée par le bouton "Accepter la commande".
+
+Veuillez m'envoyer le code de votre page qui liste les commandes pour le livreur (celle qui contient le bouton 'Accepter').
+
+💡 Préparation du code de déduction
+En attendant, voici la logique que nous allons ajouter à cette fonction d'acceptation, en utilisant les fonctions de mise à jour sécurisée de Firestore :
+
+JavaScript
+// Pseudo-code de la fonction à corriger (par exemple, handleAcceptOrder)
+
+import { doc, updateDoc, increment, getDoc, runTransaction } from 'firebase/firestore'; 
+// ... autres imports
+
+const handleAcceptOrder = async (orderId, driverId) => {
+    // 1. Définir le coût de la commande (ex: 1 jeton)
+    const COST = 1;
+
+    try {
+        // ⭐ UTILISER UNE TRANSACTION POUR LA SÉCURITÉ ⭐
+        // Une transaction garantit que la lecture et l'écriture sont atomiques.
+        await runTransaction(db, async (transaction) => {
+            
+            // a. Lire les données du livreur
+            const driverRef = doc(db, "livreurs", driverId);
+            const driverDoc = await transaction.get(driverRef);
+
+            if (!driverDoc.exists) {
+                throw new Error("Livreur introuvable.");
+            }
+
+            const currentTokens = driverDoc.data().tokens_balance || 0;
+
+            // b. Vérifier si le solde est suffisant
+            if (currentTokens < COST) {
+                // Le solde est insuffisant, lever une erreur qui sera capturée
+                throw new Error("Solde de jetons insuffisant. Veuillez recharger.");
+            }
+
+            // c. Déduire le jeton du livreur
+            transaction.update(driverRef, {
+                tokens_balance: increment(-COST)
+            });
+
+            // d. Attribuer la commande au livreur (Mettre à jour la commande)
+            const orderRef = doc(db, "commandes", orderId);
+            transaction.update(orderRef, {
+                driverId: driverId,
+                status: 'accepted', // ou 'en_cours'
+                acceptanceTime: new Date()
+            });
+        });
+
+        // Succès de la transaction et des deux mises à jour
+        // Afficher un succès à l'utilisateur
+        console.log("Commande acceptée et jeton déduit avec succès.");
+
+    } catch (error) {
+        // Afficher le message d'erreur (solde insuffisant ou autre)
+        console.error("Échec de l'acceptation de la commande:", error.message);
+        // Ici, vous afficherez un message d'erreur personnalisé à l'utilisateur
+    }
+};
+C'est cette logique que nous allons intégrer dans votre fonction d'acceptation de commande. Envoyez-moi le fichier correspondant !
+
+// src/pages/AdminHome.js
+
+import { collection, doc, getDocs, updateDoc } from "firebase/firestore";
+
+import L from "leaflet";
+
+import "leaflet-routing-machine";
+
+import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
+
+import "leaflet/dist/leaflet.css";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import { MapContainer, Marker, TileLayer } from "react-leaflet";
+
+import { db } from "../firebase";
+
+
+
+import AdminBottomMenu from "../components/AdminBottomMenu";
+
+import SideMenu from "../components/SideMenu";
+
+import "./AdminHome.css";
+
+
+
+const DEFAULT_CENTER = { lat: 5.4022097, lng: -3.9882904 };
+
+
+
+// --- Fonctions utilitaires ---
+
+
+
+// Fonction de la Haversine pour calculer la distance réelle en km
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+
+  const toRad = (v) => (v * Math.PI) / 180;
+
+  const R = 6371; // Rayon de la Terre en km
+
+
+
+  const dLat = toRad(lat2 - lat1);
+
+  const dLon = toRad(lon2 - lon1);
+
+
+
+  const a =
+
+    Math.sin(dLat / 2) ** 2 +
+
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+
+
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // Distance en km
+
+}
+
+
+
+const convertToTokens = (fcfa) => Math.floor(fcfa / 5); // 1 jeton = 5 FCFA
+
+
+
+// --- Icônes Leaflet ---
+
+const livreurIcon = new L.Icon({
+
+  iconUrl: "https://cdn-icons-png.flaticon.com/512/1048/1048323.png",
+
+  iconSize: [40, 40],
+
+});
+
+const colisIcon = new L.Icon({
+
+  iconUrl: "https://cdn-icons-png.flaticon.com/512/679/679922.png",
+
+  iconSize: [40, 40],
+
+});
+
+
+
+// --- Composant Principal ---
+
+export default function AdminHome() {
+
+  const mapRef = useRef(null);
+
+  const routingControlRef = useRef(null); // Référence pour le contrôle de routage
+
+
+
+  const [livreurs, setLivreurs] = useState([]);
+
+  const [orders, setOrders] = useState([]);
+
+  const [selectedOrder, setSelectedOrder] = useState(null);
+
+  const [selectedLivreur, setSelectedLivreur] = useState(null);
+
+
+
+  // 1. Récupération des données (Livreurs et commandes pending)
+
+  useEffect(() => {
+
+    const fetchData = async () => {
+
+      try {
+
+        // Récupération des livreurs
+
+        const livreursSnap = await getDocs(collection(db, "livreurs"));
+
+        setLivreurs(livreursSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+
+
+        // Récupération des commandes en attente
+
+        const ordersSnap = await getDocs(collection(db, "livraisons"));
+
+        const pending = ordersSnap.docs
+
+          .map(d => ({ id: d.id, ...d.data() }))
+
+          .filter(o => o.status === "pending");
+
+
+
+        setOrders(pending);
+
+      } catch (e) {
+
+        console.error("Firebase error", e);
+
+      }
+
+    };
+
+    fetchData();
+
+  }, []);
+
+
+
+  // 2. Tri des livreurs par distance (Correction: Utilisation de la Haversine)
+
+  const sortedLivreurs = useMemo(() => {
+
+    if (!selectedOrder) return livreurs;
+
+    const oc = selectedOrder;
+
+    const orderLat = oc.latitude || oc.lat;
+
+    const orderLng = oc.longitude || oc.lng;
+
+
+
+    return [...livreurs].map(l => {
+
+      const livreurLat = l.latitude || l.lat;
+
+      const livreurLng = l.longitude || l.lng;
+
+
+
+      // Calcul de la distance Haversine
+
+      const distanceKm = (livreurLat && livreurLng)
+
+        ? calculateDistance(livreurLat, livreurLng, orderLat, orderLng)
+
+        : Infinity; // Mettre à l'infini si la position du livreur est inconnue
+
+
+
+      return {
+
+        ...l,
+
+        distance: distanceKm
+
+      };
+
+    }).sort((a, b) => a.distance - b.distance);
+
+  }, [selectedOrder, livreurs]);
+
+
+
+  // 3. Logique d'Assignation (Correction: Cohérence avec LivreurHome)
+
+  const assignOrder = async () => {
+
+    if (!selectedOrder || !selectedLivreur) {
+
+      alert("Sélection requise");
+
+      return;
+
+    }
+
+
+
+    const basePrice = selectedOrder.method === "eco" ? 500 : 650;
+
+    // Commission ajustée
+
+    const commission = Math.min(Math.max(basePrice * 0.15, 200), 350);
+
+    const totalPrice = basePrice + commission;
+
+    const tokens = convertToTokens(totalPrice);
+
+
+
+    try {
+
+      const orderRef = doc(db, "livraisons", selectedOrder.id);
+
+      await updateDoc(orderRef, {
+
+        livreurId: selectedLivreur.id, // ✅ CORRIGÉ pour correspondre à LivreurHome
+
+        price: totalPrice,
+
+        commission,
+
+        tokensAssigned: tokens,
+
+        status: "accepted" // ✅ CORRIGÉ pour mettre la livraison en cours (accepted)
+
+      });
+
+
+
+      alert(`Commande assignée à ${selectedLivreur.name} (${tokens} jetons)`);
+
+
+
+      // Mise à jour de l'état local
+
+      setOrders(prev => prev.filter(o => o.id !== selectedOrder.id));
+
+      setSelectedOrder(null);
+
+      setSelectedLivreur(null);
+
+    } catch (e) {
+
+      console.error("Erreur assignation:", e);
+
+      alert("Erreur serveur");
+
+    }
+
+  };
+
+
+
+  // 4. Logique de la carte et du routage
+
+  const mapCenter = useMemo(() => {
+
+    if (selectedOrder) {
+
+      return { lat: selectedOrder.latitude || selectedOrder.lat, lng: selectedOrder.longitude || selectedOrder.lng };
+
+    }
+
+    if (selectedLivreur) {
+
+      return { lat: selectedLivreur.latitude || selectedLivreur.lat, lng: selectedLivreur.longitude || selectedLivreur.lng };
+
+    }
+
+    return DEFAULT_CENTER;
+
+  }, [selectedOrder, selectedLivreur]);
+
+
+
+
+
+  useEffect(() => {
+
+    if (!mapRef.current) return;
+
+
+
+    // Supprimer le contrôle de routage précédent s'il existe
+
+    if (routingControlRef.current) {
+
+      mapRef.current.removeControl(routingControlRef.current);
+
+      routingControlRef.current = null;
+
+    }
+
+
+
+    if (selectedOrder && selectedLivreur) {
+
+      const map = mapRef.current;
+
+
+
+      // Créer et ajouter le nouveau contrôle de routage
+
+      routingControlRef.current = L.Routing.control({
+
+        waypoints: [
+
+          L.latLng(selectedLivreur.latitude || selectedLivreur.lat, selectedLivreur.longitude || selectedLivreur.lng),
+
+          L.latLng(selectedOrder.latitude || selectedOrder.lat, selectedOrder.longitude || selectedOrder.lng)
+
+        ],
+
+        lineOptions: { styles: [{ color: "blue", opacity: 0.6, weight: 5 }] },
+
+        addWaypoints: false,
+
+        draggableWaypoints: false,
+
+        fitSelectedRoutes: true,
+
+        show: false,
+
+      }).addTo(map);
+
+    }
+
+  }, [selectedOrder, selectedLivreur]);
+
+
+
+  return (
+
+    <div className="adminhome-page">
+
+      <SideMenu />
+
+
+
+      <div className="dashboard-content">
+
+        {/* Carte */}
+
+        <section className="map-section">
+
+          <MapContainer
+
+            center={mapCenter}
+
+            zoom={14}
+
+            scrollWheelZoom={false}
+
+            style={{ width: "100%", height: "100%" }}
+
+            // Utilisation de whenCreated pour capturer la référence de la carte
+
+            whenCreated={(map) => { mapRef.current = map; }}
+
+          >
+
+            <TileLayer
+
+              attribution="© OpenStreetMap"
+
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+
+            />
+
+            {/* Marqueur Livreur sélectionné */}
+
+            {selectedLivreur && selectedLivreur.lat && <Marker position={{ lat: selectedLivreur.latitude || selectedLivreur.lat, lng: selectedLivreur.longitude || selectedLivreur.lng }} icon={livreurIcon} />}
+
+            {/* Marqueur Commande sélectionnée */}
+
+            {selectedOrder && selectedOrder.lat && <Marker position={{ lat: selectedOrder.latitude || selectedOrder.lat, lng: selectedOrder.longitude || selectedOrder.lng }} icon={colisIcon} />}
+
+          </MapContainer>
+
+        </section>
+
+
+
+        {/* Panel scrollable */}
+
+        <section className="control-panel">
+
+          <h3>Assignation rapide</h3>
+
+
+
+          <button
+
+            className="btn-assign-action"
+
+            onClick={assignOrder}
+
+            disabled={!selectedOrder || !selectedLivreur}
+
+          >
+
+            🚀 Assigner
+
+          </button>
+
+
+
+          <div className="panel-section orders-list scrollable">
+
+            <h4>Commandes en attente</h4>
+
+            {orders.map(order => (
+
+              <div
+
+                key={order.id}
+
+                className={`card order-card ${selectedOrder?.id === order.id ? "selected" : ""}`}
+
+                onClick={() => setSelectedOrder(order)}
+
+              >
+
+                <p><b>Client:</b> {order.client || "N/A"}</p>
+
+                <p><b>Adresse:</b> {order.address}</p>
+
+                <p><b>Méthode:</b> {order.method}</p>
+
+              </div>
+
+            ))}
+
+          </div>
+
+
+
+          <div className="panel-section livreurs-list scrollable">
+
+            <h4>Livreurs disponibles</h4>
+
+            {sortedLivreurs.map(l => (
+
+              <div
+
+                key={l.id}
+
+                className={`card livreur-card ${selectedLivreur?.id === l.id ? "selected" : ""} ${l.status === 'online' ? 'online' : 'offline'}`}
+
+                onClick={() => setSelectedLivreur(l)}
+
+              >
+
+                <p><b>Nom:</b> {l.name || "Livreur ID: " + l.id.substring(0, 5)}</p>
+
+                <p><b>Statut:</b> {l.status === 'online' ? '🟢 En ligne' : '🔴 Hors ligne'}</p>
+
+                {selectedOrder && l.distance !== Infinity && <p>Distance: {l.distance?.toFixed(2)} km</p>}
+
+              </div>
+
+            ))}
+
+          </div>
+
+        </section>
+
+      </div>
+
+
+
+      <AdminBottomMenu />
+
+    </div>
+
+  );
+
+}
+
+C'est une information cruciale ! Le fichier que vous avez envoyé, AdminHome.js, révèle que l'assignation des commandes aux livreurs est gérée manuellement par un administrateur via la fonction assignOrder.
+
+Par conséquent, l'attribution des jetons n'est pas un mécanisme que le livreur déclenche en cliquant sur "Accepter", mais c'est l'administrateur qui doit vérifier si le livreur a suffisamment de jetons avant de lui assigner la commande.
+
+Nous allons modifier la fonction assignOrder pour :
+
+Vérifier le solde de jetons du livreur sélectionné (selectedLivreur.tokens_balance).
+
+Si le solde est insuffisant, annuler l'assignation et afficher un message.
+
+Si le solde est suffisant, assigner la commande ET déduire les jetons en utilisant une transaction Firestore pour garantir l'atomicité de l'opération (afin que la déduction et l'assignation ne se fassent pas séparément).
+
+🛠️ Corrections dans AdminHome.js
+Pour effectuer une déduction atomique, nous devons importer runTransaction depuis Firebase, et nous devons nous assurer que la collection des livreurs est appelée livreurs (ce que vous faites déjà) et qu'ils ont bien le champ tokens_balance.
+
+1. Imports Firestore (Ajouter runTransaction)
+Dans votre fichier AdminHome.js, assurez-vous que les imports incluent runTransaction et increment (que vous aviez déjà utilisé dans le fichier de gestion des jetons) :
+
+JavaScript
+// src/pages/AdminHome.js
+import { collection, doc, getDocs, updateDoc, runTransaction, increment } from "firebase/firestore"; // ⭐ runTransaction et increment ajoutés ici
+import L from "leaflet";
+// ... (reste des imports)
+import { db } from "../firebase";
+2. Modification de la fonction assignOrder
+Remplacez entièrement votre fonction actuelle assignOrder par la version transactionnelle ci-dessous :
+
+JavaScript
+  // 3. Logique d'Assignation SÉCURISÉE (Transaction Firestore)
+  const assignOrder = async () => {
+    if (!selectedOrder || !selectedLivreur) {
+      alert("Sélection requise");
+      return;
+    }
+
+    // Calcul des jetons à déduire
+    const basePrice = selectedOrder.method === "eco" ? 500 : 650;
+    const commission = Math.min(Math.max(basePrice * 0.15, 200), 350);
+    const totalPrice = basePrice + commission;
+    // COÛT DE LA COMMANDE EN JETONS
+    const tokensCost = convertToTokens(totalPrice); 
+
+    try {
+      // ⭐ DÉMARRAGE DE LA TRANSACTION
+      await runTransaction(db, async (transaction) => {
+        
+        // 1. Référence au Livreurs
+        const livreurRef = doc(db, "livreurs", selectedLivreur.id);
+        const livreurDoc = await transaction.get(livreurRef);
+
+        if (!livreurDoc.exists) {
+          throw new Error("Livreur introuvable dans la base de données.");
+        }
+
+        const currentTokens = livreurDoc.data().tokens_balance || 0;
+
+        // 2. VÉRIFICATION DU SOLDE
+        if (currentTokens < tokensCost) {
+          throw new Error(`Solde insuffisant. Le livreur a ${currentTokens} jetons, mais ${tokensCost} sont requis.`);
+        }
+
+        // 3. DÉDUCTION DES JETONS
+        transaction.update(livreurRef, {
+          tokens_balance: increment(-tokensCost), // Déduction du coût de la commande
+          // Mise à jour de l'état du livreur si nécessaire (ex: passer à 'busy')
+        });
+
+        // 4. ASSIGNATION DE LA COMMANDE
+        const orderRef = doc(db, "livraisons", selectedOrder.id);
+        transaction.update(orderRef, {
+          livreurId: selectedLivreur.id, 
+          price: totalPrice,
+          commission,
+          tokensAssigned: tokensCost,
+          status: "accepted" 
+        });
+      });
+      // ⭐ FIN DE LA TRANSACTION
+
+      alert(`✅ Commande assignée à ${selectedLivreur.name} ! ${tokensCost} jetons ont été déduits.`);
+
+      // Mise à jour de l'état local (après validation de la transaction)
+      setOrders(prev => prev.filter(o => o.id !== selectedOrder.id));
+      setSelectedOrder(null);
+      setSelectedLivreur(null);
+
+    } catch (e) {
+      console.error("Erreur assignation:", e);
+      // Afficher l'erreur spécifique de la transaction (comme solde insuffisant)
+      alert(`🚫 Erreur lors de l'assignation : ${e.message}`);
+    }
+  };
+Explication de la correction
+Transaction Atomique (runTransaction): En utilisant une transaction, nous nous assurons que si une étape échoue (par exemple, si le solde est insuffisant), aucune des modifications n'est appliquée (ni la déduction de jetons, ni l'assignation de la commande). Ceci est crucial pour la fiabilité financière.
+
+Vérification du Solde: La transaction lit d'abord les données du livreur. Elle vérifie si currentTokens est inférieur au coût (tokensCost). Si c'est le cas, elle lève une erreur, ce qui annule toute la transaction.
+
+Déduction et Assignation: Si le solde est suffisant, la transaction met à jour :
+
+La collection livreurs en déduisant les jetons via increment(-tokensCost).
+
+La collection livraisons en assignant le livreur et le statut accepted.
+
+✅ Prochaine Étape : Le rechargement
+Maintenant que l'attribution (inscription) et la déduction (assignation) sont gérées, la dernière pièce est la fonction qui crédite les jetons suite à un paiement.
+
+Dans votre fichier ValidationRecus.jsx (Page Admin), vous aviez la fonction handleManualValidation qui indiquait que la Logique Crédit était manquante :
+
+JavaScript
+// LIGNE DANS handleManualValidation DE ValidationRecus.jsx
+// LOGIQUE CRÉDIT : Vous devrez avoir ici une autre Cloud Function pour créditer 
+// le solde de l'utilisateur de manière sécurisée (Transaction Firestore).
+Cependant, comme nous avons modifié AdminHome.js, nous pouvons utiliser la même technique de transaction directement dans handleManualValidation.
+
+Voulez-vous que je vous aide à corriger la fonction handleManualValidation dans votre fichier ValidationRecus.jsx pour y insérer la logique de crédit sécurisée des jetons ?
+
+import React, { useState } from 'react';
+
+import './RechargeJetons.css';
+
+// Importez `useEffect` si vous avez besoin de charger le solde initial du livreur.
+
+
+
+/**
+
+ * Composant de soumission de reçu par le livreur.
+
+ * Utilise l'API pour envoyer le reçu et le montant.
+
+ */
+
+const RechargeJetons = () => {
+
+    // États
+
+    const [amount, setAmount] = useState('');
+
+    const [receiptFile, setReceiptFile] = useState(null);
+
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const [message, setMessage] = useState('');
+
+    const [isSuccess, setIsSuccess] = useState(false);
+
+    // Note : Le solde actuel du livreur doit être chargé via un hook useEffect au montage du composant.
+
+    const [currentBalance, setCurrentBalance] = useState(150.00);
+
+
+
+    // ✅ MODIFICATION CLÉ : Récupération du jeton depuis le stockage local.
+
+    // Assurez-vous que le nom de clé ('livreurToken') correspond à celui utilisé à la connexion.
+
+    const token = localStorage.getItem('livreurToken');
+
+   
+
+    // Vous devriez idéalement décoder le token pour obtenir l'ID du livreur
+
+    // Dans cet exemple, nous conservons l'ID simulé pour la clarté.
+
+    const livreurId = 'LIVREUR_123';
+
+   
+
+    // --- Gestion des changements de champ ---
+
+    const handleAmountChange = (e) => {
+
+        const value = e.target.value.replace(/[^0-9.]/g, '');
+
+        setAmount(value);
+
+        setMessage('');
+
+    };
+
+
+
+    const handleFileChange = (e) => {
+
+        const file = e.target.files[0];
+
+        setReceiptFile(file);
+
+        setMessage('');
+
+    };
+
+
+
+    // --- Fonction de Soumission (avec API réelle) ---
+
+    const handleSubmit = async (e) => {
+
+        e.preventDefault();
+
+       
+
+        // Vérification du token
+
+        if (!token) {
+
+             setMessage('❌ Vous n\'êtes pas connecté. Veuillez vous reconnecter.');
+
+             setIsSuccess(false);
+
+             return;
+
+        }
+
+
+
+        if (!amount || parseFloat(amount) <= 0 || !receiptFile) {
+
+            setMessage('⚠️ Veuillez entrer un montant valide et sélectionner un reçu.');
+
+            setIsSuccess(false);
+
+            return;
+
+        }
+
+
+
+        // 1. Préparer les données
+
+        const formData = new FormData();
+
+        formData.append('amount', parseFloat(amount));
+
+        formData.append('receipt', receiptFile);
+
+        formData.append('livreurId', livreurId);
+
+
+
+        setIsSubmitting(true);
+
+        setMessage('⏳ Envoi de la demande en cours...');
+
+        setIsSuccess(false);
+
+
+
+        try {
+
+            // 2. Appel à l'endpoint API
+
+            const response = await fetch('/api/livreur/depot', {
+
+                method: 'POST',
+
+                // Le Content-Type est géré automatiquement par le navigateur pour FormData
+
+                headers: {
+
+                    'Authorization': `Bearer ${token}` // Jeton dynamique
+
+                },
+
+                body: formData, // Le fichier et le montant
+
+            });
+
+
+
+            // 3. Gestion des erreurs HTTP
+
+            if (!response.ok) {
+
+                let errorDetails = `Erreur ${response.status} lors de la soumission.`;
+
+                try {
+
+                    const errorData = await response.json();
+
+                    errorDetails = errorData.message || errorDetails;
+
+                } catch {
+
+                    // Laisser l'erreur générique si la réponse n'est pas JSON
+
+                }
+
+                throw new Error(errorDetails);
+
+            }
+
+
+
+            // 4. Traitement du succès
+
+            const apiResponse = await response.json();
+
+           
+
+            setMessage(`✅ Dépôt soumis (ID: ${apiResponse.transactionId}). En attente de validation Admin.`);
+
+            setIsSuccess(true);
+
+           
+
+            // Réinitialiser le formulaire après succès
+
+            setAmount('');
+
+            setReceiptFile(null);
+
+            document.getElementById('receipt-upload').value = null;
+
+
+
+        } catch (error) {
+
+            console.error('Erreur lors de la soumission du dépôt:', error.message);
+
+            setMessage(`❌ Erreur lors de l'envoi de la demande. Détails : ${error.message}`);
+
+            setIsSuccess(false);
+
+        } finally {
+
+            setIsSubmitting(false);
+
+        }
+
+    };
+
+   
+
+    // Reste du code de rendu inchangé
+
+    const isFormInvalid = !amount || parseFloat(amount) <= 0 || !receiptFile || isSubmitting || !token;
+
+    const formattedAmount = amount ? `${parseFloat(amount).toFixed(2)}` : '0.00';
+
+
+
+
+
+    return (
+
+        <div className="recharge-container">
+
+            <header className="recharge-header">
+
+                <i className="fas fa-wallet icon-main"></i>
+
+                <h2>Demande de Crédit Jetons</h2>
+
+            </header>
+
+
+
+            <div className="current-balance-info">
+
+                {/* Le solde doit être chargé depuis l'API au montage */}
+
+                <p>Solde actuel (Jetons) : <strong>{currentBalance.toFixed(2)}</strong></p>
+
+            </div>
+
+
+
+            <form onSubmit={handleSubmit} className="recharge-form-jetons">
+
+               
+
+                <div className="form-group">
+
+                    <label htmlFor="amount">Montant du dépôt (en DZD ou autre devise)</label>
+
+                    <input
+
+                        id="amount"
+
+                        type="text"
+
+                        placeholder="Ex: 5000"
+
+                        value={amount}
+
+                        onChange={handleAmountChange}
+
+                        disabled={isSubmitting || !token}
+
+                        required
+
+                    />
+
+                    <small>Le montant doit correspondre au reçu bancaire ou en espèces.</small>
+
+                </div>
+
+
+
+                <div className="form-group file-group">
+
+                    <label htmlFor="receipt-upload">Reçu de dépôt (Image)</label>
+
+                    <input
+
+                        id="receipt-upload"
+
+                        type="file"
+
+                        accept="image/*"
+
+                        onChange={handleFileChange}
+
+                        disabled={isSubmitting || !token}
+
+                        required
+
+                    />
+
+                    {receiptFile && (
+
+                        <p className="file-info">
+
+                            Fichier sélectionné : <strong>{receiptFile.name}</strong>
+
+                            <i className="fas fa-check-circle check-icon"></i>
+
+                        </p>
+
+                    )}
+
+                    <small>Seules les images (PNG, JPG) sont acceptées.</small>
+
+                </div>
+
+               
+
+                <div className="recap-box">
+
+                    <h3>Récapitulatif</h3>
+
+                    <p>Montant à créditer : **{formattedAmount}** Jetons</p>
+
+                    <p>Statut : **{receiptFile ? 'Prêt à soumettre' : 'Reçu manquant'}**</p>
+
+                </div>
+
+
+
+                <button
+
+                    type="submit"
+
+                    className="btn-submit-recharge"
+
+                    disabled={isFormInvalid}
+
+                >
+
+                    {isSubmitting ? (
+
+                        <>
+
+                            <i className="fas fa-spinner fa-spin"></i> Envoi...
+
+                        </>
+
+                    ) : (
+
+                        <>
+
+                            <i className="fas fa-paper-plane"></i> Envoyer la demande
+
+                        </>
+
+                    )}
+
+                </button>
+
+
+
+            </form>
+
+
+
+            {/* Affichage du message de statut */}
+
+            {message && (
+
+                <div className={`status-message ${isSuccess ? 'success' : 'error'}`}>
+
+                    {message}
+
+                </div>
+
+            )}
+
+        </div>
+
+    );
+
+};
+
+
+
+export default RechargeJetons;
+
+C'est parfait ! Ce composant RechargeJetons.jsx est la page côté livreur qui déclenche le processus de rechargement en soumettant le reçu à votre API (/api/livreur/depot).
+
+Cette soumission crée une entrée dans votre collection pending_deposits (comme vu dans ValidationRecus.jsx).
+
+Nous allons maintenant finaliser la boucle en corrigeant la fonction handleManualValidation dans la page d'administration ValidationRecus.jsx pour créditer les jetons de manière sécurisée après la vérification.
+
+🛠️ Correction de la Validation (Fichier ValidationRecus.jsx)
+L'objectif est d'utiliser une Transaction Firestore pour garantir que si l'administrateur valide le dépôt, le statut du dépôt est mis à jour ET le solde du livreur est crédité, ou aucune des deux opérations n'est effectuée si l'une échoue.
+
+1. Mise à jour des Imports dans ValidationRecus.jsx
+Assurez-vous d'importer runTransaction pour la sécurité de la mise à jour des jetons.
+
+JavaScript
+// src/pages/ValidationRecus.jsx
+
+// Importer runTransaction
+import { collection, doc, getDocs, getFirestore, query, updateDoc, where, runTransaction, increment } from 'firebase/firestore'; 
+// ... (reste des imports)
+2. Modification de handleManualValidation
+Remplacez votre fonction actuelle handleManualValidation (qui contient la note sur la logique crédit manquante) par la version sécurisée ci-dessous :
+
+JavaScript
+// --- Fonction pour valider manuellement (ou confirmer) le dépôt ---
+const handleManualValidation = async (transactionId, userId, amount) => {
+    // Note : Le champ 'amount' dans la transaction doit déjà être le nombre de jetons.
+    const tokensToCredit = amount; // On suppose que 'amount' est déjà en jetons.
+
+    if (!window.confirm(`Confirmer la validation du dépôt de ${tokensToCredit} jetons pour l'utilisateur ${userId} ?`)) {
+        return;
+    }
+
+    try {
+        // ⭐ DÉBUT DE LA TRANSACTION : Assurer l'atomicité des deux mises à jour
+        await runTransaction(db, async (transaction) => {
+            
+            // 1. Mise à jour du statut du Dépôt (vérifie si la transaction existe)
+            const depositRef = doc(db, 'pending_deposits', transactionId);
+            const depositDoc = await transaction.get(depositRef);
+
+            if (!depositDoc.exists) {
+                throw new Error("Dépôt introuvable.");
+            }
+            if (depositDoc.data().status !== 'PENDING') {
+                throw new Error("Dépôt déjà traité.");
+            }
+
+            transaction.update(depositRef, {
+                status: 'VERIFIED',
+                adminId: 'Votre_Admin_ID', // Mettez l'ID réel de l'administrateur connecté
+                validationDate: new Date()
+            });
+
+            // 2. Crédit du solde de l'utilisateur (Livreur)
+            const userRef = doc(db, 'livreurs', userId); // On cible la collection 'livreurs'
+            
+            // Si l'utilisateur n'est pas un livreur, on ne devrait pas le créditer ici, mais vérifiez l'UID.
+            // On peut s'assurer que l'utilisateur existe avant de créditer.
+            const userDoc = await transaction.get(userRef);
+
+            if (!userDoc.exists) {
+                throw new Error("Livreur introuvable pour le crédit.");
+            }
+
+            transaction.update(userRef, {
+                tokens_balance: increment(tokensToCredit) // Crédit du montant
+            });
+
+        });
+        // ⭐ FIN DE LA TRANSACTION
+
+        alert(`✅ Dépôt ${transactionId.substring(0, 8)}... validé. Le livreur a été crédité de ${tokensToCredit} jetons.`);
+
+        // Supprimer la transaction du tableau local (après succès de la transaction)
+        setTransactions(prev => prev.filter(t => t.id !== transactionId));
+
+    } catch (error) {
+        console.error("Erreur de validation/crédit:", error);
+        alert(`❌ Erreur lors de la validation du dépôt. Détails: ${error.message}`);
+    }
+};
+Explication
+Référence de l'utilisateur: Nous avons corrigé la référence pour pointer vers la collection livreurs (doc(db, 'livreurs', userId)), qui est celle où le champ tokens_balance a été créé.
+
+Double Vérification: La transaction vérifie à la fois que le dépôt existe et qu'il est toujours en statut PENDING.
+
+Crédit Sécurisé: L'opération transaction.update(userRef, { tokens_balance: increment(tokensToCredit) }) met à jour le solde du livreur, et l'usage de runTransaction garantit que cette mise à jour est effectuée uniquement si la mise à jour du statut du dépôt réussit également.
+
+🚀 Conclusion et Prochaines Étapes
+Vous avez maintenant implémenté l'intégralité du cycle de vie des jetons :
+
+Inscription (FormInscription.js) : Attribution des 50 jetons bonus.
+
+Déduction (AdminHome.js) : Déduction des jetons via une transaction sécurisée lors de l'assignation de commande par l'administrateur.
+
+Rechargement (Admin: ValidationRecus.jsx) : Crédit des jetons via une transaction sécurisée après la vérification manuelle du reçu de dépôt.
+
+Avez-vous besoin d'aide avec un autre aspect de votre application ou souhaitez-vous revoir un point particulier ?
+
+envoie le code complet de la page
+
+Absolument. Voici le code complet et corrigé de la page ValidationRecus.jsx qui intègre la logique de transaction sécurisée pour créditer les jetons suite à la validation manuelle de l'administrateur.
+
+J'ai inclus les imports nécessaires et la fonction handleManualValidation mise à jour.
+
+📄 Code Complet : src/pages/ValidationRecus.jsx
+JavaScript
+import { collection, doc, getDocs, getFirestore, query, updateDoc, where, runTransaction, increment } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import React, { useEffect, useState } from 'react';
+import SideMenu from "../components/SideMenu";
+import { app } from '../firebase'; // Assurez-vous d'avoir le chemin correct vers votre init Firebase
+import './ValidationRecus.css'; 
+import L from 'leaflet'; // Pour éviter l'erreur si vous utilisez d'autres composants Leaflet
+
+// Si vous utilisez cet icône dans la page, assurez-vous qu'il est défini
+// delete L.Icon.Default.prototype._getIconUrl; 
+// L.Icon.Default.mergeOptions({
+//   iconRetinaUrl: "...",
+//   iconUrl: "...",
+//   shadowUrl: "...",
+// });
+
+
+export default function ValidationReçus() {
+    const [transactions, setTransactions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [callingIA, setCallingIA] = useState(null); // ID de la transaction en cours d'analyse
+
+    const db = getFirestore(app);
+    const functions = getFunctions(app);
+    // Crée l'objet pour appeler la fonction Cloud
+    const verifyReceipt = httpsCallable(functions, 'verifierReçu');
+
+    useEffect(() => {
+        // Charger les transactions avec le statut 'PENDING'
+        const fetchPendingTransactions = async () => {
+            setLoading(true);
+            try {
+                // Requête pour les transactions qui n'ont pas encore été traitées
+                const q = query(
+                    collection(db, 'pending_deposits'),
+                    where('status', '==', 'PENDING')
+                );
+                const querySnapshot = await getDocs(q);
+
+                const fetchedTransactions = querySnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+
+                setTransactions(fetchedTransactions);
+            } catch (error) {
+                console.error("Erreur lors du chargement des transactions:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchPendingTransactions();
+    }, [db]);
+
+    // --- Fonction pour appeler l'analyse Google Vision ---
+    const handleAnalyzeReceipt = async (transactionId) => {
+        setCallingIA(transactionId);
+        try {
+            // Appel à la Cloud Function "verifierReçu"
+            const result = await verifyReceipt({ transactionId });
+
+            alert(`Analyse IA pour ${transactionId} terminée : ${result.data.iaStatus}.`);
+
+            // Mettre à jour l'état local du tableau pour refléter le statut IA
+            setTransactions(prev =>
+                prev.map(t =>
+                    t.id === transactionId
+                        ? { ...t, iaStatus: result.data.iaStatus, iaDetails: result.data.message }
+                        : t
+                )
+            );
+
+        } catch (error) {
+            console.error("Erreur lors de l'appel IA:", error);
+            alert(`Échec de l'analyse IA : ${error.message}`);
+        } finally {
+            setCallingIA(null);
+        }
+    };
+
+    // --- Fonction pour valider manuellement (ou confirmer) le dépôt ---
+    // ⭐ LOGIQUE CRITIQUE AVEC TRANSACTION SÉCURISÉE ⭐
+    const handleManualValidation = async (transactionId, userId, amount) => {
+        // On suppose que 'amount' est déjà le nombre de jetons à créditer
+        const tokensToCredit = amount; 
+
+        if (!window.confirm(`Confirmer la validation du dépôt de ${tokensToCredit} jetons pour l'utilisateur ${userId.substring(0, 8)}... ?`)) {
+            return;
+        }
+
+        try {
+            // DÉBUT DE LA TRANSACTION : Assurer l'atomicité
+            await runTransaction(db, async (transaction) => {
+                
+                // 1. Référence et vérification du Dépôt
+                const depositRef = doc(db, 'pending_deposits', transactionId);
+                const depositDoc = await transaction.get(depositRef);
+
+                if (!depositDoc.exists) {
+                    throw new Error("Dépôt introuvable.");
+                }
+                if (depositDoc.data().status !== 'PENDING') {
+                    throw new Error("Dépôt déjà traité.");
+                }
+
+                // Mise à jour du statut du dépôt
+                transaction.update(depositRef, {
+                    status: 'VERIFIED',
+                    adminId: 'Votre_Admin_ID', // ID de l'administrateur
+                    validationDate: new Date()
+                });
+
+                // 2. Crédit du solde de l'utilisateur (Livreur)
+                const userRef = doc(db, 'livreurs', userId); 
+                
+                // Vérifier si le livreur existe
+                const userDoc = await transaction.get(userRef);
+                if (!userDoc.exists) {
+                    throw new Error("Livreur introuvable pour le crédit.");
+                }
+
+                // Crédit des jetons
+                transaction.update(userRef, {
+                    tokens_balance: increment(tokensToCredit)
+                });
+
+            });
+            // FIN DE LA TRANSACTION
+
+            alert(`✅ Dépôt ${transactionId.substring(0, 8)}... validé. Le livreur a été crédité de ${tokensToCredit} jetons.`);
+
+            // Mise à jour de l'état local
+            setTransactions(prev => prev.filter(t => t.id !== transactionId));
+
+        } catch (error) {
+            console.error("Erreur de validation/crédit:", error);
+            alert(`❌ Erreur lors de la validation du dépôt. Détails: ${error.message}`);
+        }
+    };
+
+    // --- Affichage du statut IA ---
+    const getIAStatusTag = (status) => {
+        switch (status) {
+            case 'VERIFIED':
+                return <span className="tag ia-verified">✅ OK</span>;
+            case 'REJECTED':
+                return <span className="tag ia-rejected">❌ Refusé</span>;
+            case 'ERROR':
+                return <span className="tag ia-error">⚠️ Erreur</span>;
+            default:
+                return <span className="tag ia-pending">...</span>;
+        }
+    };
+
+    if (loading) {
+        return <p>Chargement des dépôts en attente...</p>;
+    }
+
+    return (
+        <div className="validation-page">
+            <SideMenu />
+            <div className="validation-content">
+                <h2>🔍 Validation des Reçus (Jetons)</h2>
+
+                {transactions.length === 0 ? (
+                    <p className="no-data">Aucun reçu en attente de validation.</p>
+                ) : (
+                    <table className="validation-table">
+                        <thead>
+                            <tr>
+                                <th>ID Trans.</th>
+                                <th>Utilisateur (ID)</th>
+                                <th>Montant Attendu</th>
+                                <th>Statut IA</th>
+                                <th>Reçu</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {transactions.map((t) => (
+                                <tr key={t.id}>
+                                    <td>{t.id.substring(0, 8)}...</td>
+                                    <td>{t.userId.substring(0, 8)}...</td>
+                                    <td>{t.amount} Jetons</td>
+                                    <td>{getIAStatusTag(t.iaStatus)}</td>
+                                    <td>
+                                        <a href={t.receiptUrl} target="_blank" rel="noopener noreferrer">Voir le reçu</a>
+                                    </td>
+                                    <td>
+                                        <button
+                                            className="btn-ia-check"
+                                            onClick={() => handleAnalyzeReceipt(t.id)}
+                                            disabled={callingIA === t.id || t.iaStatus === 'VERIFIED'}
+                                        >
+                                            {callingIA === t.id ? 'Analyse...' : 'Lancer l\'IA'}
+                                        </button>
+                                        <button
+                                            className="btn-validate"
+                                            onClick={() => handleManualValidation(t.id, t.userId, t.amount)}
+                                        >
+                                            Valider
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+        </div>
+    );
+}
+const { initializeTestEnvironment } = require("@firebase/rules-unit-testing");
+
+const { doc, setDoc, getDoc } = require("firebase/firestore");
+
+
+
+(async () => {
+
+  const testEnv = await initializeTestEnvironment({
+
+    projectId: "demo-project",
+
+    firestore: {
+
+      rules: `
+
+        rules_version = '2';
+
+        service cloud.firestore {
+
+          match /databases/{database}/documents {
+
+            function isAdmin() {
+
+              return request.auth != null && request.auth.uid == "FWOQ9S4Lxqfc2cBoTsa4m6J6j8p2";
+
+            }
+
+            match /clients/{clientId} {
+
+              allow read, write: if isAdmin() || (request.auth != null && request.auth.uid == clientId);
+
+            }
+
+            match /livreurs/{livreurId} {
+
+              allow read, write: if isAdmin() || (request.auth != null && request.auth.uid == livreurId);
+
+            }
+
+            match /{document=**} {
+
+              allow read, write: if isAdmin();
+
+            }
+
+          }
+
+        }
+
+      `,
+
+    },
+
+  });
+
+
+
+  // 🔹 Cas 1 : Admin
+
+  const adminCtx = testEnv.authenticatedContext("FWOQ9S4Lxqfc2cBoTsa4m6J6j8p2");
+
+  await setDoc(doc(adminCtx.firestore(), "clients/testClient"), { name: "ok" });
+
+  console.log("✅ Admin peut écrire/lire partout");
+
+
+
+  // 🔹 Cas 2 : Client sur son propre doc
+
+  const clientCtx = testEnv.authenticatedContext("client123");
+
+  await setDoc(doc(clientCtx.firestore(), "clients/client123"), { name: "ok" });
+
+  console.log("✅ Client peut écrire/lire son propre doc");
+
+
+
+  // 🔹 Cas 3 : Client sur un autre doc
+
+  try {
+
+    await setDoc(doc(clientCtx.firestore(), "clients/otherClient"), { name: "fail" });
+
+    console.log("❌ Client ne devrait pas écrire dans un autre doc");
+
+  } catch {
+
+    console.log("✅ Refusé comme prévu (client sur autre doc)");
+
+  }
+
+
+
+  // 🔹 Cas 4 : Livreur sur son propre doc
+
+  const livreurCtx = testEnv.authenticatedContext("livreur456");
+
+  await setDoc(doc(livreurCtx.firestore(), "livreurs/livreur456"), { name: "ok" });
+
+  console.log("✅ Livreur peut écrire/lire son propre doc");
+
+
+
+  // 🔹 Cas 5 : Livreur sur un autre doc
+
+  try {
+
+    await setDoc(doc(livreurCtx.firestore(), "livreurs/otherLivreur"), { name: "fail" });
+
+    console.log("❌ Livreur ne devrait pas écrire dans un autre doc");
+
+  } catch {
+
+    console.log("✅ Refusé comme prévu (livreur sur autre doc)");
+
+  }
+
+
+
+  // 🔹 Cas 6 : Non connecté
+
+  const anonCtx = testEnv.unauthenticatedContext();
+
+  try {
+
+    await getDoc(doc(anonCtx.firestore(), "clients/client123"));
+
+    console.log("❌ Non connecté ne devrait pas lire");
+
+  } catch {
+
+    console.log("✅ Refusé comme prévu (non connecté)");
+
+  }
+
+
+
+  await testEnv.cleanup();
+
+})();
+
+C'est un excellent script de test unitaire. Les règles actuelles sont solides, mais pour garantir la sécurité de la gestion des jetons que nous venons d'implémenter (crédit/débit par Admin uniquement), nous devons renforcer la règle sur la collection /livreurs.
+
+Un livreur ne devrait jamais pouvoir modifier son propre solde de jetons (tokens_balance).
+
+Voici le script mis à jour avec les règles de sécurité affinées et un nouveau cas de test pour vérifier la protection du solde de jetons.
+
+J'ai encadré les nouvelles règles de sécurité pour plus de clarté.
+Test des règles de sécurité Firestore (Tokens sécurisés)
+29 nov., 12:28
+
+rules_version = '2';
+
+
+
+service cloud.firestore {
+
+  match /databases/{database}/documents {
+
+
+
+    // ✅ Vérifie si c’est ton admin principal
+
+    function isAdmin() {
+
+      return request.auth != null && request.auth.uid == "FWOQ9S4Lxqfc2cBoTsa4m6J6j8p2";
+
+    }
+
+
+
+    // ✅ Vérifie si c’est un utilisateur connecté
+
+    function isAuthenticated() {
+
+      return request.auth != null;
+
+    }
+
+
+
+    // 🔹 Clients
+
+    match /clients/{clientId} {
+
+      allow read, update, delete: if isAdmin() || (isAuthenticated() && request.auth.uid == clientId);
+
+      allow create: if isAuthenticated();
+
+    }
+
+
+
+    // 🔹 Livreurs
+
+    match /livreurs/{livreurId} {
+
+      allow read, update, delete: if isAdmin() || (isAuthenticated() && request.auth.uid == livreurId);
+
+      allow create: if isAuthenticated();
+
+    }
+
+
+
+    // 🔹 Preuves
+
+    match /proofs/{proofId} {
+
+      allow create: if isAuthenticated();
+
+      allow read: if isAdmin() || isAuthenticated();
+
+      allow update, delete: if isAdmin();
+
+    }
+
+
+
+    // 🔹 Commandes
+
+    match /orders/{orderId} {
+
+      allow create: if isAuthenticated();
+
+      allow read: if isAdmin() || isAuthenticated();
+
+      allow update, delete: if isAdmin();
+
+    }
+
+
+
+    // 🔹 Paramètres globaux
+
+    match /settings/{settingId} {
+
+      allow read: if true;
+
+      allow write: if isAdmin();
+
+    }
+
+
+
+    // 🔹 Sécurité par défaut
+
+    match /{document=**} {
+
+      allow read, write: if false;
+
+    }
+
+  }
+
+}
+
+C'est une excellente pratique de revoir vos règles de sécurité après avoir implémenté des transactions financières (jetons).
+
+Vos règles initiales étaient solides pour la lecture et l'écriture du profil, mais elles laissaient une faille critique : le livreur pouvait modifier son propre solde de jetons (tokens_balance) !
+
+J'ai renforcé les règles pour :
+
+Protéger le champ tokens_balance dans la collection /livreurs contre toute modification par le livreur lui-même.
+
+Utiliser les noms de collections réels de notre code (/livraisons et /pending_deposits) et affiner les permissions de lecture pour ces collections.
+
+Voici la version corrigée des règles.
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Définitions de rôle
+    function isAdmin() {
+      return request.auth != null && request.auth.uid == "FWOQ9S4Lxqfc2cBoTsa4m6J6j8p2";
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // 🔹 Clients (Règle d'origine, OK)
+    match /clients/{clientId} {
+      allow read, update, delete: if isAdmin() || (isAuthenticated() && request.auth.uid == clientId);
+      allow create: if isAuthenticated();
+    }
+
+    // 🔹 Livreurs (CRITIQUE : Protection du solde de jetons)
+    match /livreurs/{livreurId} {
+      // Lecture : Admin ou le Livreur lui-même
+      allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == livreurId);
+      
+      // Mise à jour :
+      // 1. Autorisé pour l'Admin.
+      // 2. Autorisé pour le Livreur LUI-MÊME SEULEMENT s'il n'essaie pas de modifier le champ 'tokens_balance' 
+      //    (le champ doit être absent de la requête ou sa valeur doit être inchangée par rapport à l'ancienne).
+      allow update: if isAdmin() || (
+        isAuthenticated() &&
+        request.auth.uid == livreurId &&
+        (
+          !('tokens_balance' in request.resource.data) || 
+          request.resource.data.tokens_balance == resource.data.tokens_balance
+        )
+      );
+      
+      // Création/Suppression (Admin uniquement pour garantir l'initialisation du solde)
+      allow create, delete: if isAdmin();
+    }
+
+    // 🔹 Commandes (livraisons)
+    match /livraisons/{livraisonId} {
+      // Lecture : Admin, Client (clientId dans le doc), ou Livreur (livreurId dans le doc)
+      allow read: if isAdmin() || (
+        isAuthenticated() && (
+          request.auth.uid == resource.data.clientId || 
+          request.auth.uid == resource.data.livreurId
+        )
+      );
+      
+      // Création : Tout utilisateur connecté (pour passer une commande)
+      allow create: if isAuthenticated();
+      
+      // Mise à jour/Suppression : Admin uniquement (pour l'assignation sécurisée)
+      allow update, delete: if isAdmin();
+    }
+    
+    // 🔹 Dépôts en attente (pending_deposits)
+    match /pending_deposits/{depositId} {
+      // Création : Tout utilisateur connecté (pour soumettre un reçu)
+      allow create: if isAuthenticated();
+      
+      // Lecture : Admin, ou le Livreur qui a soumis (userId dans le doc)
+      allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.userId);
+      
+      // Mise à jour/Suppression : Admin uniquement (pour la validation sécurisée)
+      allow update, delete: if isAdmin();
+    }
+
+    // 🔹 Paramètres globaux (Règle d'origine, OK)
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 🔹 Sécurité par défaut (Règle d'origine, OK)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+
+
+Vérifiez les réponses de Gemini, car il peut se tromper.
+

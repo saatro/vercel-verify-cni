@@ -1,0 +1,127 @@
+.parametres-page {
+  display: flex;
+  justify-content: center;   /* centre verticalement */
+  align-items: center;       /* centre horizontalement */
+  min-height: 100vh;
+  background: #f9fafc;
+  font-family: "Segoe UI", Roboto, sans-serif;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* Thème clair */
+.parametres-page.light {
+  background: #f9fafc;
+  color: #333;
+}
+
+/* Thème sombre */
+.parametres-page.dark {
+  background: #1e1e1e;
+  color: #f9fafc;
+}
+
+/* Accent color dynamique */
+.parametres-page {
+  --accent-color: #0078d7;
+}
+
+/* Card centrée */
+.param-card {
+  background: #fff;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 350px;
+}
+
+.parametres-page.dark .param-card {
+  background: #2a2a2a;
+}
+
+/* Titre */
+h2 {
+  margin-bottom: 10px;
+  color: var(--accent-color);
+  text-align: center;
+}
+
+/* Sections */
+.param-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.param-section label {
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+.param-section select,
+.param-section input[type="color"],
+.param-section input[type="checkbox"] {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: inherit;
+  width: 100%;
+}
+
+/* Boutons uniformes */
+button {
+  width: 220px;
+  height: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 10px;
+}
+
+/* Bouton principal (sauvegarde) */
+.btn-save {
+  background: var(--accent-color);
+  color: #fff;
+  border: none;
+}
+
+.btn-save:hover {
+  background: #005fa3;
+  box-shadow: 0 0 8px var(--accent-color);
+  transform: translateY(-2px);
+}
+
+/* Boutons secondaires */
+.livreur-card button,
+.param-section button {
+  background: #444;
+  color: #fff;
+  border: none;
+}
+
+.livreur-card button:hover,
+.param-section button:hover {
+  background: #666;
+  box-shadow: 0 0 8px var(--accent-color);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .param-card {
+    width: 90%;
+    padding: 20px;
+  }
+
+  button {
+    width: 100%;
+  }
+}

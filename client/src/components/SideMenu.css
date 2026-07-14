@@ -1,0 +1,314 @@
+/* -------------------- BOUTON FLOTTANT (FERMÉ) -------------------- */
+.edge-button {
+  position: fixed;
+  top: 25%; /* Ajusté pour ne pas gêner le milieu de l'écran */
+  left: 0;
+  transform: translateY(-50%);
+  width: 24px; /* Un peu plus large pour l'attraper facilement */
+  height: 90px;
+  background: rgba(61, 2, 128, 0.4); /* Teinte verte pour rappeler le livreur */
+  backdrop-filter: blur(10px);
+  border-radius: 0 16px 16px 0;
+  box-shadow: 2px 4px 15px rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 9999;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.edge-button:active {
+  transform: translateY(-50%) scaleX(1.3);
+}
+
+.edge-button::after {
+  content: "";
+  width: 6px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 5px;
+  transition: height 0.3s ease;
+}
+
+/* -------------------- PANNEAU (OUVERT) -------------------- */
+.edge-panel {
+  position: fixed;
+  top: 50%;
+  left: 15px;
+  transform: translateY(-50%);
+  width: 115px; /* Largeur augmentée pour le confort */
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(20px) saturate(160%);
+  padding: 3px 8px; /* Padding plus généreux */
+  border-radius: 28px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  z-index: 99999;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  animation: slideIn 0.4s cubic-bezier(.17,.67,.83,.67);
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translate(-40px, -50%); }
+  to { opacity: 1; transform: translate(0, -50%); }
+}
+
+/* -------------------- OPTIONS DU MENU -------------------- */
+.edge-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.5);
+  margin-bottom: 8px; /* Plus d'espace entre les boutons */
+  padding: 3px 5px; /* Padding intérieur augmenté */
+  border-radius: 22px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.edge-option:hover {
+  background: rgba(255, 255, 255, 0.8);
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* Icônes */
+.edge-option svg {
+  font-size: 25px;
+  color: hsl(266, 98%, 50%); /* Vert thématique */
+  margin-bottom: 8px; /* Plus d'espace sous l'icône */
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+}
+
+/* Label */
+.label-mini {
+  font-size: 8px; /* Légèrement réduit pour l'esthétique */
+  font-weight: 600; /* Ultra gras pour la lisibilité */
+  color: #1a1a1a;
+  
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+}
+
+/* -------------------- BOUTON QUITTER / FERMER -------------------- */
+.logout-btn {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.logout-btn svg {
+  color: #6805da !important;
+}
+
+.logout-btn .label-mini {
+  color: #5e07eb;
+}
+
+.edge-close {
+  text-align: center;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.05);
+  color: #444;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.edge-close:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+.m-badge-notif {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: #ef4444; /* Rouge vif */
+  color: white;
+  font-size: 10px;
+  font-weight: 900;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.edge-panel {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Effet de flou en arrière-plan pour faire ressortir le menu */
+  backdrop-filter: blur(10px); 
+  background: rgba(236, 236, 236, 0.95) !important; /* Slate 950 semi-transparent */
+}
+
+.edge-option:active {
+  background: rgba(16, 185, 129, 0.1); /* Flash vert émeraude au clic */
+  transform: scale(0.98);
+}
+
+/* Animation discrète pour l'option Partager dans le menu */
+.share-option-highlight {
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.share-option-highlight:hover {
+  background: rgba(16, 185, 129, 0.08) !important;
+}
+
+/* Structure de l'arrière-plan de la modale QR code - CORRIGÉ POUR PASSER DEVANT */
+.side-menu-qr-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px); /* Compatibilité iOS */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* Priorité absolue pour passer devant le volet SideNav et n'importe quel edge-panel */
+  z-index: 99999 !important; 
+  
+  animation: menuQrFadeIn 0.2s ease-out;
+}
+
+/* Fenêtre de contenu de la modale */
+.side-menu-qr-content {
+  background: #ffffff;
+  width: 90%;
+  max-width: 340px;
+  border-radius: 28px;
+  padding: 24px;
+  position: relative;
+  text-align: center;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  
+  /* Force l'affichage au premier plan à l'intérieur de l'overlay */
+  z-index: 100000 !important; 
+  
+  animation: menuQrScaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Bouton de fermeture de la modale */
+.side-menu-qr-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: #f1f5f9;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.side-menu-qr-close:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.side-menu-qr-close:active {
+  transform: scale(0.95);
+}
+
+/* En-tête de la modale */
+.side-menu-qr-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.side-menu-qr-icon-circle {
+  width: 44px;
+  height: 44px;
+  background: #f0fdf4;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.side-menu-qr-content h3 {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+}
+
+.side-menu-qr-content p {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0 5px;
+}
+
+/* Zone d'affichage de l'image QR Code */
+.side-menu-qr-image-wrapper {
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  border-radius: 20px;
+  padding: 12px;
+  display: inline-block;
+  margin-bottom: 14px;
+}
+
+.side-menu-qr-img {
+  width: 180px;
+  height: 180px;
+  display: block;
+}
+
+/* Zone textuelle pour afficher l'URL en bas */
+.side-menu-qr-footer {
+  background: #f1f5f9;
+  padding: 8px 12px;
+  border-radius: 10px;
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-menu-qr-footer span {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+}
+
+/* Animations d'entrée */
+@keyframes menuQrFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes menuQrScaleUp {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}

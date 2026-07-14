@@ -1,0 +1,247 @@
+/* ─── CONTENEUR PRINCIPAL ─── */
+/* --- Force le scroll au niveau du grid container --- */
+.product-grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 20px;
+  padding: 21px;
+  max-width: 1400px;
+  margin: 0 auto;
+  
+  /* AJOUTS CRITIQUES POUR LE SCROLL */
+  height: auto;
+  min-height: 101%; /* Force le navigateur à reconnaître un contenu scrollable */
+  overflow-y: visible !important; 
+  overflow-x: hidden !important;
+  pointer-events: auto; /* Assure que les clics et drags sont captés */
+  -webkit-overflow-scrolling: touch;
+  height: calc(100vh - 60px); /* 60px étant la taille de ta barre de navigation */
+  overflow-y: auto !important;
+}
+
+/* Empêche les éléments internes de bloquer le touch-event */
+.product-card {
+  touch-action: pan-y; /* Autorise le scroll vertical même si on appuie sur une carte */
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.product-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.12);
+  border-color: #10b981;
+}
+
+/* ─── IMAGE WRAPPER ─── */
+.product-image-wrapper {
+  position: relative;
+  aspect-ratio: 0.9 / 0.8;
+  background: #f8fafc;
+  box-shadow: 0 8px 13px -8px rgba(103, 1, 199, 0.329);
+  overflow: hidden;
+}
+
+.product-image {
+  width: 90%;
+  height: 90%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.product-card:hover .product-image {
+  transform: scale(1.08);
+}
+
+/* ─── BADGES (Promo & Stock) ─── */
+.promo-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: #ef4444;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  z-index: 2;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
+}
+
+.stock-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  z-index: 3;
+  backdrop-filter: blur(2px);
+}
+
+.product-card.out-of-stock {
+  opacity: 0.8;
+  filter: grayscale(0.5);
+}
+
+/* ─── CONTENU TEXTUEL ─── */
+.product-content {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.vendor-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: #6903dd;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 20px;
+  width: fit-content;
+  margin-bottom: 8px;
+}
+
+.product-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  height: 2.4em;
+  line-height: 1.2;
+}
+
+/* ─── RATING & META ─── */
+.product-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.rating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: -21px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: #7004c9;
+}
+
+.sales-count {
+  font-size: 0.75rem;
+  color: #7a05da;
+  
+}
+
+/* ─── PRIX ─── */
+.price-block {
+  margin-top: -13px;
+  margin-bottom: 13px;
+}
+
+.current-price {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.current-price small {
+  font-size: 0.9rem;
+}
+
+.old-price {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  text-decoration: line-through;
+}
+
+/* ─── ACTIONS (BOUTONS) ─── */
+.card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: -10px;
+}
+
+.btn-cart {
+  background: #6003cade;
+  color: #f6f3f8;
+  border: none;
+  padding: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-cart:hover:not(:disabled) {
+  background: #e2e8f0;
+  color: #10b981;
+}
+
+.btn-buy {
+  flex-grow: 1;
+  background: #f8bf03;
+  color: white;
+  border: none;
+  padding: 10px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-buy:hover:not(:disabled) {
+  background: #059669;
+}
+
+.btn-buy:disabled, .btn-cart:disabled {
+  background: #e2e8f0;
+  cursor: not-allowed;
+  color: #94a3b8;
+}
+
+/* ─── ÉTAT VIDE ─── */
+.no-products-found {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 60px 20px;
+  color: #94a3b8;
+}
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 640px) {
+  .product-grid-container {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 8px;
+  }
+
+  .product-title {
+    font-size: 0.85rem;
+  }
+
+  .current-price {
+    font-size: 1rem;
+  }
+
+  .btn-buy span {
+    display: none; /* Cache le texte "Acheter" sur mobile pour gagner de la place */
+  }
+}
+

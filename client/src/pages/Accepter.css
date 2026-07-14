@@ -1,0 +1,199 @@
+/* ====== Layout global ====== */
+.page-fullscreen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background: linear-gradient(135deg, #eef2f7, #dce3f0);
+  font-family: "Poppins", "Segoe UI", sans-serif;
+  position: relative;
+}
+
+/* ====== Bouton retour ====== */
+.button-back {
+  position: absolute;
+  top: 15px;
+  left: 20px;
+  padding: 8px 14px;
+  font-size: 0.8rem;
+  border: none;
+  border-radius: 8px;
+  background: #007bff;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.2s ease;
+  z-index: 10;
+}
+.button-back:hover {
+  background: #005fcc;
+  transform: translateY(-2px);
+}
+
+/* ====== Header de la page ====== */
+.page-header {
+  text-align: center;
+  padding: 60px 20px 30px;
+}
+
+.page-header h1 {
+  font-size: 2rem;
+  color: #1e3a8a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  animation: fadeInDown 0.6s ease-in-out;
+}
+
+/* ====== Contenu principal ====== */
+.page-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  text-align: center;
+  animation: fadeIn 0.6s ease-in-out;
+  margin-bottom: 80px; /* pour le bouton sticky */
+}
+
+/* ====== Section trajet ====== */
+.trajet-section {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px 30px;
+  margin-bottom: 25px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  width: 90%;
+  max-width: 500px;
+  text-align: left;
+}
+
+.trajet-section p {
+  font-size: 15px;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+/* ====== Carte client ====== */
+.client-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 25px 30px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
+  text-align: left;
+}
+
+/* ====== Header carte client avec avatar ====== */
+.client-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.client-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 3px solid #007bff;
+  object-fit: cover;
+  box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
+}
+
+.client-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.client-role {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+/* ====== Infos client ====== */
+.client-info p {
+  margin: 10px 0;
+  font-size: 15px;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ====== Bouton principal ====== */
+.confirm-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #007bff;
+  color: #fff;
+  padding: 14px 22px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 16px;
+  box-shadow: 0 6px 15px rgba(0, 123, 255, 0.3);
+  transition: all 0.3s ease;
+}
+
+.confirm-btn:hover {
+  background: #005fcc;
+  transform: translateY(-2px);
+}
+
+/* ====== Icônes ====== */
+.icon {
+  width: 20px;
+  height: 20px;
+  color: #007bff;
+}
+
+/* ====== Animations ====== */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ====== Responsive ====== */
+@media (max-width: 768px) {
+  .page-header h1 {
+    font-size: 1.4rem;
+  }
+
+  .trajet-section, .client-card {
+    width: 95%;
+    padding: 20px;
+  }
+
+  /* ====== Bouton sticky mobile ====== */
+  .confirm-btn {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 400px;
+    z-index: 50;
+  }
+
+  .page-content {
+    margin-bottom: 100px; /* espace pour bouton sticky */
+  }
+}

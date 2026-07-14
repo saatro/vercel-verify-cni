@@ -1,0 +1,175 @@
+/* Palette : Blanc, Gris clair, Indigo doux */
+.light-market {
+  background-color: #f8fafc;
+  min-height: 100vh;
+  color: #1e293b;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.light-header {
+  background: white;
+  padding: 50px 20px 15px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.header-main h1 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.btn-back, .header-cart {
+  background: none;
+  border: none;
+  color: #1e293b;
+  cursor: pointer;
+}
+
+.search-bar-light {
+  background: #f1f5f9;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  padding: 10px 15px;
+  gap: 10px;
+  color: #64748b;
+}
+
+.search-bar-light input {
+  background: none;
+  border: none;
+  width: 100%;
+  outline: none;
+  font-size: 0.95rem;
+}
+
+.light-content {
+  padding: 10px 0;
+}
+
+/* Sections Supermarchés */
+.shelf-section {
+  background: white;
+  margin-bottom: 10px;
+  padding: 20px 0;
+}
+
+.shelf-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px 15px;
+}
+
+.vendor-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-img {
+  width: 45px;
+  height: 45px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid #f1f5f9;
+}
+
+.brand-info h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.delivery-tag {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.btn-more {
+  color: #4f46e5;
+  background: #eef2ff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* Scroll Horizontal */
+.horizontal-scroll-light {
+  display: flex;
+  gap: 15px;
+  overflow-x: auto;
+  padding: 0 20px;
+  scrollbar-width: none;
+}
+
+.horizontal-scroll-light::-webkit-scrollbar { display: none; }
+
+.light-product-card {
+  flex: 0 0 140px;
+}
+
+.p-img-box {
+  width: 140px;
+  height: 140px;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+}
+
+.p-img-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.p-add-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  background: white;
+  border-radius: 50%;
+  border: none;
+  font-size: 1.2rem;
+  font-weight: bold;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4f46e5;
+}
+
+.p-info {
+  margin-top: 8px;
+}
+
+.p-price-light {
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.p-name-light {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 2px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

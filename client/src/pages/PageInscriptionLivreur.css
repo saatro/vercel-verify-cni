@@ -1,0 +1,68 @@
+/* Container de la grille des véhicules */
+.vehicle-selector-grid-full {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* 2 colonnes égales */
+  gap: 12px;
+  margin: 25px 0; /* Aérer */
+}
+
+/* Style des boutons véhicules */
+.v-btn-opt {
+  display: flex;
+  flex-direction: row; /* Icône et texte sur la même ligne */
+  align-items: center;
+  justify-content: flex-start; /* Aligner à gauche */
+  gap: 12px;
+  padding: 14px 18px;
+  background: #1e293b; /* Couleur de fond premium */
+  border: 1px solid #334155;
+  border-radius: 12px;
+  color: #94a3b8;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* État actif - Couleur Émeraude mambo */
+.v-btn-opt.v-active {
+  background: #10b981;
+  color: white;
+  border-color: #059669;
+}
+
+/* --- SECTION DOCUMENTS --- */
+.docs-flex {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); /* 3 colonnes pour 3 docs */
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.mambo-doc-card {
+  background: #020617; /* Fond plus sombre */
+  border: 1px dashed #334155;
+  padding: 16px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.mambo-doc-card.is-active {
+  border-style: solid;
+  border-color: #10b981; /* Validé */
+}
+
+/* Ajustement global des inputs */
+.reg-form-body input {
+  width: 100%;
+  padding: 14px;
+  margin-bottom: 12px;
+  background: #020617;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  color: white;
+}

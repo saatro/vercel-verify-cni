@@ -1,0 +1,311 @@
+/**
+ * ═══════════════════════════════════════════════════
+ * 🎯 ADMIN BOTTOM MENU - CSS PREMIUM
+ * ═══════════════════════════════════════════════════
+ * Navigation moderne pour l'admin
+ * ═══════════════════════════════════════════════════
+ */
+
+/* ═══════════ CONTAINER PRINCIPAL ═══════════ */
+.admin-bottom-menu {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  background: white;
+  padding: 5px 5px calc(8px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid #e2e8f0;
+  box-shadow:
+    0 -4px 12px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  backdrop-filter: blur(10px);
+}
+
+/* ═══════════ ITEM DE MENU ═══════════ */
+.admin-bottom-menu .menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex: 1;
+  max-width: 70px;
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-bottom-menu .menu-item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #6366f1 0%, #4f0991 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 12px;
+}
+
+/* ═══════════ ICÔNE ═══════════ */
+.admin-bottom-menu .menu-icon {
+  font-size: 21px;
+  color: #524581;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  z-index: 1;
+}
+
+/* ═══════════ LABEL ═══════════ */
+.admin-bottom-menu .menu-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  z-index: 1;
+}
+
+/* ═══════════ ÉTAT HOVER ═══════════ */
+.admin-bottom-menu .menu-item:hover {
+  background: #f8fafc;
+  transform: translateY(-2px);
+}
+
+.admin-bottom-menu .menu-item:hover .menu-icon {
+  color: #6366f1;
+  transform: scale(1.1);
+}
+
+.admin-bottom-menu .menu-item:hover .menu-label {
+  color: #6366f1;
+}
+
+/* ═══════════ ÉTAT ACTIVE ═══════════ */
+.admin-bottom-menu .menu-item.active::before {
+  opacity: 1;
+}
+
+.admin-bottom-menu .menu-item.active {
+  background: linear-gradient(135deg, #6366f1 0%, #4f0991 100%);
+  box-shadow:
+    0 4px 12px rgba(99, 102, 241, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+}
+
+.admin-bottom-menu .menu-item.active .menu-icon {
+  color: white;
+  animation: bounce-icon 0.5s ease;
+}
+
+.admin-bottom-menu .menu-item.active .menu-label {
+  color: white;
+  font-weight: 900;
+}
+
+@keyframes bounce-icon {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+/* ═══════════ ÉTAT ACTIVE (Press) ═══════════ */
+.admin-bottom-menu .menu-item:active {
+  transform: scale(0.95);
+}
+
+/* ═══════════ INDICATEUR ACTIF ═══════════ */
+.admin-bottom-menu .menu-item.active::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 3px;
+  background: white;
+  border-radius: 0 0 4px 4px;
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.5);
+}
+
+/* ═══════════ RESPONSIVE MOBILE ═══════════ */
+@media (max-width: 768px) {
+  .admin-bottom-menu {
+    padding: 10px 6px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .admin-bottom-menu .menu-item {
+    padding: 8px 8px;
+    gap: 3px;
+  }
+
+  .admin-bottom-menu .menu-icon {
+    font-size: 22px;
+  }
+
+  .admin-bottom-menu .menu-label {
+    font-size: 10px;
+  }
+}
+
+/* ═══════════ PETITS ÉCRANS ═══════════ */
+@media (max-width: 480px) {
+  .admin-bottom-menu {
+    padding: 5px 4px calc(5px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .admin-bottom-menu .menu-item {
+    padding: 6px 6px;
+    gap: 2px;
+    max-width: 70px;
+  }
+
+  .admin-bottom-menu .menu-icon {
+    font-size: 20px;
+  }
+
+  .admin-bottom-menu .menu-label {
+    font-size: 9px;
+  }
+}
+
+/* ═══════════ GRANDS ÉCRANS ═══════════ */
+@media (min-width: 1024px) {
+  .admin-bottom-menu {
+    max-width: 600px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 20px 20px 0 0;
+  }
+
+  .admin-bottom-menu .menu-item {
+    padding: 10px 16px;
+    gap: 6px;
+    max-width: 100px;
+  }
+
+  .admin-bottom-menu .menu-icon {
+    font-size: 26px;
+  }
+
+  .admin-bottom-menu .menu-label {
+    font-size: 12px;
+  }
+}
+
+/* ═══════════ MODE PAYSAGE ═══════════ */
+@media (max-height: 600px) and (orientation: landscape) {
+  .admin-bottom-menu {
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .admin-bottom-menu .menu-item {
+    padding: 4px 8px;
+    gap: 2px;
+  }
+
+  .admin-bottom-menu .menu-icon {
+    font-size: 18px;
+  }
+
+  .admin-bottom-menu .menu-label {
+    font-size: 8px;
+  }
+}
+
+/* ═══════════ ANIMATION D'ENTRÉE ═══════════ */
+@keyframes slideUpMenu {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.admin-bottom-menu {
+  animation: slideUpMenu 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ═══════════ BADGES (NOTIFICATIONS) ═══════════ */
+.admin-bottom-menu .menu-item .badge {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 900;
+  color: white;
+  border: 2px solid white;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+  z-index: 2;
+  animation: pulse-badge 2s ease-in-out infinite;
+}
+
+@keyframes pulse-badge {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+/* ═══════════ DARK MODE ═══════════ */
+@media (prefers-color-scheme: dark) {
+  .admin-bottom-menu {
+    background: #d4e1f7;
+    border-top-color: #9dc0f133;
+  }
+
+  .admin-bottom-menu .menu-item:hover {
+    background: #334155;
+  }
+
+  .admin-bottom-menu .menu-icon {
+    color: #94a3b8;
+  }
+
+  .admin-bottom-menu .menu-label {
+    color: #94a3b8;
+  }
+
+  .admin-bottom-menu .menu-item:hover .menu-icon,
+  .admin-bottom-menu .menu-item:hover .menu-label {
+    color: #818cf8;
+  }
+}
+
+/* ═══════════ PRINT ═══════════ */
+@media print {
+  .admin-bottom-menu {
+    display: none;
+  }
+}

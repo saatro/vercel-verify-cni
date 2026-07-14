@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "livraison-moto",
+    "mambo": "livraison-moto"
+  }
+}

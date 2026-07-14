@@ -1,0 +1,172 @@
+/* ──── CONFIGURATION DE LA PAGE VÉHICULES ──── */
+.light-market {
+  background-color: #f1f5f9; /* Un gris très léger type garage moderne */
+  min-height: 100vh;
+  padding-bottom: 40px;
+}
+
+/* ──── HEADER SPÉCIFIQUE AUTO ──── */
+.light-header {
+  background: #ffffff;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.header-main h1 {
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: #0f172a;
+  letter-spacing: -0.5px;
+}
+
+/* ──── BARRE DE RECHERCHE AUTO ──── */
+.search-bar-light {
+  display: flex;
+  align-items: center;
+  background: #f8fafc;
+  margin: 0 16px 15px;
+  padding: 12px 18px;
+  border-radius: 14px;
+  gap: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.search-bar-light input {
+  border: none;
+  background: none;
+  outline: none;
+  width: 100%;
+  font-size: 0.95rem;
+  color: #334155;
+}
+
+/* ──── SECTIONS SHOWROOM ──── */
+.shelf-section {
+  margin-top: 25px;
+  padding-left: 16px;
+}
+
+.shelf-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-right: 16px;
+}
+
+.vendor-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%; /* Logo rond pour les concessionnaires */
+  object-fit: cover;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.brand-info h3 {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #1e293b;
+  margin: 0;
+}
+
+.location-info {
+  font-size: 0.7rem;
+  color: #94a3b8;
+}
+
+/* ──── SCROLL DES VOITURES ──── */
+.horizontal-scroll-light {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 5px 0 15px;
+  scrollbar-width: none;
+}
+
+.horizontal-scroll-light::-webkit-scrollbar {
+  display: none;
+}
+
+/* ──── CARTE VÉHICULE ──── */
+.light-product-card {
+  min-width: 190px; /* Plus large que les produits standards pour mieux voir la voiture */
+  background: white;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}
+
+.light-product-card:active {
+  transform: scale(0.96);
+}
+
+.p-img-box {
+  position: relative;
+  width: 100%;
+  height: 130px;
+  background: #f1f5f9;
+}
+
+.p-img-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ──── INFOS TECHNIQUES ──── */
+.p-info {
+  padding: 12px;
+}
+
+.p-price-light {
+  font-size: 1rem;
+  font-weight: 900;
+  color: #0f172a;
+  margin: 0;
+}
+
+.p-name-light {
+  font-size: 0.85rem;
+  color: #475569;
+  font-weight: 600;
+  margin: 4px 0;
+  text-transform: uppercase; /* Style "Listing Auto" */
+}
+
+/* Petit badge spécifique pour la boîte de vitesse ou km */
+.p-info p:last-child {
+  background: #f8fafc;
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+/* ──── ANIMATIONS ──── */
+.skeleton-pulse {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

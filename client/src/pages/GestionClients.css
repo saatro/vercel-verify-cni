@@ -1,0 +1,82 @@
+.client-home { position: relative; height: 100vh; width: 100vw; overflow: hidden; }
+.leaflet-map { height: 100%; width: 100%; z-index: 1; }
+
+.ui-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  pointer-events: none; /* Permet de toucher la carte à travers le vide */
+}
+
+/* ✅ CONFIGURATION DU PANNEAU CONTENEUR DYNAMIQUE */
+.main-panel {
+  background: white;
+  border-radius: 30px 30px 0 0;
+  pointer-events: auto; /* Réactive le clic sur le panneau */
+  box-shadow: 0 -10px 30px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  
+  /* États dynamiques gérés par classe JS pour une transition fluide */
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+              min-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.main-panel.expanded {
+  max-height: 80vh;
+  min-height: 50vh;
+}
+
+.main-panel.collapsed {
+  max-height: 45vh;
+  min-height: 115px;
+}
+
+/* ✅ ZONE EN-TÊTE FIXE (Ne doit jamais scroller) */
+.panel-header-fixed {
+  flex-shrink: 0;
+  padding: 20px 20px 0 20px;
+}
+
+/* ✅ CORPS INTERNE DÉDIÉ AU SCROLL CONDITIONNEL */
+.panel-scrollable-content {
+  flex: 1;
+  padding: 0 20px 30px 20px;
+  background: #f8fafc;
+  
+  /* Scroll fluide uniquement actif quand le panneau est déplié */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Performance tactile iOS */
+  transition: overflow-y 0.3s ease;
+}
+
+.main-panel.collapsed .panel-scrollable-content {
+  overflow-y: hidden;
+}
+
+/* ─── Éléments graphiques internes (Inchangés mais encapsulés) ─── */
+.route-card-premium { background: #f1f5f9; border-radius: 15px; padding: 15px; margin-bottom: 15px; }
+.loc-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.dot.start { background: #000; }
+.dot.end { background: #ff4b3a; }
+
+.weather-bar { display: flex; gap: 8px; margin-bottom: 15px; }
+.w-badge { background: #eee; padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+.w-badge.rain { background: #dbeafe; color: #2563eb; }
+
+.v-list { display: flex; gap: 10px; overflow-x: auto; margin-bottom: 20px; }
+.v-item { flex: 1; min-width: 110px; text-align: center; padding: 15px 5px; border-radius: 20px; border: 2px solid transparent; background: #f8fafc; }
+.v-item.active { border-color: #ff4b3a; background: #fff; }
+.v-item img { width: 45px; margin-bottom: 8px; }
+.v-label { display: block; font-size: 10px; font-weight: 800; color: #64748b; }
+.v-cost { font-size: 14px; font-weight: 900; }
+
+.btn-main {
+  width: 100%; background: #ff4b3a; color: white; border: none; padding: 18px;
+  border-radius: 18px; font-size: 16px; font-weight: 800; cursor: pointer;
+}
+.btn-main:disabled { background: #cbd5e1; }

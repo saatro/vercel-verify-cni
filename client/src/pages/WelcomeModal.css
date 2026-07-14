@@ -1,0 +1,478 @@
+/**
+ * ═══════════════════════════════════════════════════
+ * 🎉 WELCOME MODAL - CSS PREMIUM
+ * ═══════════════════════════════════════════════════
+ * Modal de félicitation pour nouveaux chauffeurs
+ * ═══════════════════════════════════════════════════
+ */
+
+/* ═══════════ OVERLAY ═══════════ */
+.welcome-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(255, 255, 255, 0.24);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 34px;
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* ═══════════ CONTAINER ═══════════ */
+.welcome-modal-container {
+    position: relative;
+    background: rgba(255, 255, 255, 0.274);
+    border-radius: 32px;
+    max-width: 500px;
+    width: 100%;
+    max-height: 89vh;
+    overflow-y: auto;
+    box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.3),
+        0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(100px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* ═══════════ CONFETTIS ═══════════ */
+.confetti-container {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    border-radius: 32px;
+}
+
+.confetti {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    top: -20px;
+    animation: fall 3s linear infinite;
+    opacity: 0;
+}
+
+@keyframes fall {
+    0% {
+        top: -20px;
+        opacity: 1;
+        transform: rotate(0deg);
+    }
+
+    100% {
+        top: 100%;
+        opacity: 0;
+        transform: rotate(360deg);
+    }
+}
+
+/* ═══════════ CONTENT ═══════════ */
+.welcome-content {
+    padding: 34px 32px;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+}
+
+/* ═══════════ ICON PRINCIPAL ═══════════ */
+.welcome-icon-wrapper {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 21px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-glow {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, #f97316 0%, #fbbf24 100%);
+    border-radius: 50%;
+    opacity: 0.2;
+    animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 0.2;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 0.3;
+    }
+}
+
+.welcome-icon {
+    position: relative;
+    color: #f97316;
+    filter: drop-shadow(0 4px 12px rgba(249, 115, 22, 0.3));
+    animation: bounce 1s ease-in-out infinite;
+}
+
+@keyframes bounce {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+/* ═══════════ TITRE ═══════════ */
+.welcome-title {
+    font-size: 21px;
+    font-weight: 750;
+    color: #0f172a;
+    margin-bottom: 6px;
+    line-height: 1.2;
+    background: linear-gradient(135deg, #0f172a 0%, #475569 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.welcome-subtitle {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f9f9fa;
+    margin-bottom: 21px;
+}
+
+/* ═══════════ BONUS CARD ═══════════ */
+.bonus-card {
+    background: linear-gradient(135deg, #f97316 0%, #fbbf24 100%);
+    border-radius: 21px;
+    padding: 21px;
+    margin-bottom: 21px;
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    box-shadow:
+        0 12px 21px rgba(249, 115, 22, 0.3),
+        0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+    animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.3s backwards;
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.bonus-icon {
+    flex-shrink: 0;
+    width: 55px;
+    height: 55px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+}
+
+.bonus-content {
+    flex: 1;
+    text-align: left;
+}
+
+.bonus-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.bonus-amount {
+    font-size: 36px;
+    font-weight: 900;
+    color: white;
+    line-height: 1;
+    margin-bottom: 4px;
+    text-shadow: 0 2px 8px rgba(247, 244, 244, 0.829);
+}
+
+.bonus-description {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* ═══════════ COMMISSION INFO ═══════════ */
+.commission-info {
+    display: flex;
+    gap: 13px;
+    margin-bottom: 13px;
+    padding: 13px;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
+    animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.4s backwards;
+}
+
+.commission-section {
+    flex: 1;
+    text-align: left;
+}
+
+.commission-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 13px;
+}
+
+.commission-header h3 {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ee8105;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.commission-rate {
+    font-size: 17px;
+    font-weight: 600;
+    color: #0f172a;
+    margin-bottom: 4px;
+}
+
+.commission-desc {
+    font-size: 12px;
+    font-weight: 600;
+    color: #c7c8c9;
+}
+
+.commission-divider {
+    width: 2px;
+    background: linear-gradient(to bottom, transparent, #cbd5e1, transparent);
+}
+
+/* ═══════════ BENEFITS LIST ═══════════ */
+.benefits-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 8px;
+    animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.5s backwards;
+}
+
+.benefit-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 15px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    text-align: left;
+    transition: all 0.3s ease;
+}
+
+.benefit-item:hover {
+    border-color: #10b981;
+    transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+}
+
+.benefit-icon {
+    flex-shrink: 0;
+    color: #10b981;
+}
+
+.benefit-item span {
+    font-size: 14px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+/* ═══════════ BOUTON CTA ═══════════ */
+.welcome-cta-button {
+    width: 100%;
+    padding: 18px 32px;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    font-size: 16px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    border-radius: 16px;
+    cursor: pointer;
+    box-shadow:
+        0 8px 24px rgba(16, 185, 129, 0.3),
+        0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.6s backwards;
+}
+
+.welcome-cta-button:hover {
+    transform: translateY(-2px);
+    box-shadow:
+        0 12px 32px rgba(16, 185, 129, 0.4),
+        0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+}
+
+.welcome-cta-button:active {
+    transform: translateY(0) scale(0.98);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+}
+
+/* ═══════════ FOOTER ═══════════ */
+.welcome-footer {
+    font-size: 13px;
+    font-weight: 600;
+    color: #d1d4d8;
+    margin-top: 20px;
+    animation: fadeIn 0.5s ease-out 0.7s backwards;
+}
+
+/* ═══════════ RESPONSIVE ═══════════ */
+@media (max-width: 768px) {
+    .welcome-content {
+        padding: 32px 24px;
+    }
+
+    .welcome-title {
+        font-size: 28px;
+    }
+
+    .welcome-icon-wrapper {
+        width: 100px;
+        height: 100px;
+        margin-bottom: 13px;
+    }
+
+    .welcome-icon {
+        width: 55px;
+        height: 55px;
+    }
+
+    .bonus-card {
+        padding: 20px;
+        gap: 13px;
+    }
+
+    .bonus-icon {
+        width: 55px;
+        height: 55px;
+    }
+
+    .bonus-amount {
+        font-size: 32px;
+    }
+
+    .commission-info {
+        flex-direction: column;
+        gap: 13px;
+        padding: 20px;
+    }
+
+    .commission-divider {
+        width: 100%;
+        height: 2px;
+        background: linear-gradient(to right, transparent, #cbd5e1, transparent);
+    }
+}
+
+@media (max-width: 480px) {
+    .welcome-content {
+        padding: 28px 20px;
+    }
+
+    .welcome-title {
+        font-size: 24px;
+    }
+
+    .welcome-subtitle {
+        font-size: 14px;
+    }
+
+    .bonus-amount {
+        font-size: 28px;
+    }
+
+    .benefit-item {
+        padding: 12px 14px;
+    }
+
+    .benefit-item span {
+        font-size: 13px;
+    }
+
+    .welcome-cta-button {
+        padding: 16px 28px;
+        font-size: 13px;
+    }
+}
+
+/* ═══════════ DARK MODE ═══════════ */
+@media (prefers-color-scheme: dark) {
+    .welcome-modal-container {
+        background: #374e72;
+    }
+
+    .welcome-title {
+        color: white;
+        background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .commission-info {
+        background: linear-gradient(135deg, #334155 0%, #475569 100%);
+        border-color: #475569;
+    }
+
+    .commission-rate,
+    .benefit-item span {
+        color: white;
+    }
+
+    .benefit-item {
+        background: #334155;
+        border-color: #475569;
+    }
+}

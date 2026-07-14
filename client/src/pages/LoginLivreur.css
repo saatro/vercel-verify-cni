@@ -1,0 +1,169 @@
+/* ═══════════════════════════════════════════════════════════
+   LoginLivreur.css – Version Premium Mambo
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --primary-green: #10b981;
+  --primary-hover: #34d399;
+  --bg-dark: #f2f3f5f8; /* Changé pour un bleu nuit profond pour un meilleur contraste */
+  --card-bg: rgba(130, 130, 133, 0.089); /* Slate-800 avec transparence */
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --text-main: #ffffff;
+  --text-muted: #94a3b8;
+}
+
+/* 1. WRAPPER PRINCIPAL */
+.pro-login-container {
+  background-color: #10b981;
+  background-image: 
+    radial-gradient(circle at 10% 20%, rgba(16, 185, 129, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(96, 165, 250, 0.1) 0%, transparent 40%);
+  min-height: 100vh;
+  
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Sora', sans-serif; /* Sora pour le côté premium */
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+/* 2. CARTE PRINCIPALE */
+.pro-login-card {
+  background: var(--card-bg);
+  margin-top: -10px;
+  backdrop-filter: blur(13px);
+  -webkit-backdrop-filter: blur(13px);
+  width: 100%;
+  max-width: 420px;
+  padding: 13px 8px;
+  border-radius: 32px;
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  animation: fadeInOut 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 3. ENTÊTE */
+.brand-section {
+  text-align: center;
+  margin-bottom: 13px;
+}
+
+.app-logo {
+  display: inline-flex;
+  padding: 13px;
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: 22px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.brand-section h1 {
+  font-size: 15px;
+  color: var(--text-main); 
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* 4. FORMULAIRE */ 
+.pro-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.input-group-pro {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: 17px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.input-group-pro input {
+  width: 100%;
+  padding: 5px 8px 13px 21px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  font-size: 15px;
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.input-group-pro input:focus {
+  outline: none;
+  border-color: var(--primary-green);
+  background: rgba(15, 23, 42, 0.8);
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+}
+
+/* 5. GPS STATUS */
+.gps-status-bar {
+  margin: 8px 0;
+}
+
+.gps-msg {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 13px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.gps-msg.ok { color: #34d399; background: rgba(52, 211, 153, 0.1); }
+.gps-msg.error { color: #f87171; background: rgba(248, 113, 113, 0.1); }
+
+
+
+.auth-footer-links {
+  margin-top: 30px;
+  text-align: center;
+  padding: 17px 0;
+}
+
+.footer-divider {
+  height: 1px;
+  background: #334155;
+  margin-bottom: 17px;
+  width: 50%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.footer-text {
+  color: #64748b;
+  font-size: 0.75rem;
+  margin-bottom: 10px;
+}
+
+.signup-link {
+  display: inline-block;
+  color: #10b981;
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 0.75rem;
+  padding: 10px 20px;
+  border: 1px solid #10b981;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  transition: all 0.3s ease;
+}
+
+.signup-link:hover {
+  background: #10b981;
+  color: white;
+}
+/* 8. ANIMATIONS */
+@keyframes fadeInOut {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+

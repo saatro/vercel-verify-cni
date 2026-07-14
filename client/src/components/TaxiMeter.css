@@ -1,0 +1,115 @@
+.taxi-meter-modern {
+  background: linear-gradient(135deg, #f7ab06b0 0%, #fcfcfd 100%);
+  border-radius: 20px;
+  padding: 5px 8px;
+  margin-top: 8px;
+  box-shadow: 0 8px 13px rgba(247, 142, 57, 0.267);
+  backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+  min-width: 280px;
+}
+
+.taxi-meter-modern.running {
+  border-color: #feffff;
+  box-shadow: 0 8px 32px rgba(251, 251, 252, 0.3);
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+.taxi-meter-modern.standby {
+  border-color: rgba(148, 163, 184, 0.3);
+  opacity: 0.85;
+}
+
+.meter-compact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.meter-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 21px;
+  background: rgba(59, 130, 246, 0.15);
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.meter-value-compact {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex: 1;
+}
+
+.value-number {
+  font-size: 28px;
+  font-weight: 900;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.value-currency {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f9fafcea;
+  text-transform: uppercase;
+}
+
+.meter-distance-compact {
+  font-size: 11px;
+  font-weight: 700;
+  color: #3c495ce3;
+  text-transform: uppercase;
+  background: rgba(251, 251, 252, 0.411);
+  padding: 4px 10px;
+  border-radius: 8px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* Animation pour le mode "running" */
+.running .meter-icon {
+  background: rgba(243, 244, 245, 0.61);
+  animation: pulse-blue 2s ease-in-out infinite;
+}
+
+@keyframes pulse-blue {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(246, 247, 248, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+  }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 8px 48px rgba(59, 130, 246, 0.5);
+  }
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .taxi-meter-modern {
+    min-width: 240px;
+    padding: 10px 16px;
+  }
+
+  .value-number {
+    font-size: 24px;
+  }
+
+  .meter-distance-compact {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+}

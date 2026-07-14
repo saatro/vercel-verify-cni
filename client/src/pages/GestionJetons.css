@@ -1,0 +1,209 @@
+/* --- Mise en page globale --- */
+.gestion-jetons-page {
+  height: 100vh;
+  width: 100%;
+  background: #0f172a;
+  color: white;
+  overflow: hidden;
+  font-family: 'Inter', sans-serif;
+}
+
+.gestion-jetons-wrapper {
+  display: flex;
+  height: 100%;
+  width: 100%;
+}
+
+/* --- Zone Carte --- */
+.gj-map-zone {
+  flex: 1;
+  height: 100%;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gj-map {
+  height: 100%;
+  width: 100%;
+}
+
+/* --- Panneau de contrôle --- */
+.gj-container {
+  width: 450px;
+  height: 100%;
+  background: #1e293b;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.gj-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.gj-header h2 {
+  font-size: 1.5rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* --- Statistiques --- */
+.gj-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.gj-mini-stat {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 12px;
+  border-radius: 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.gj-mini-stat.cash { border-left: 4px solid #6366f1; }
+.gj-mini-stat.bonus { border-left: 4px solid #facc15; }
+
+/* --- Recherche --- */
+.gj-search-wrapper {
+  position: relative;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 15px;
+  padding: 10px 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gj-search-input {
+  background: transparent;
+  border: none;
+  color: white;
+  width: 100%;
+  outline: none;
+  font-size: 0.9rem;
+}
+
+/* --- Liste des Livreurs --- */
+.gj-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.gj-user-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 25px;
+  padding: 15px;
+  transition: all 0.3s ease;
+}
+
+.gj-user-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.gj-user-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  margin-bottom: 15px;
+}
+
+.gj-user-avatar {
+  width: 40px;
+  height: 40px;
+  background: #6366f1;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.gj-user-details strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.gj-user-details span {
+  font-size: 0.75rem;
+  opacity: 0.5;
+}
+
+/* --- Blocs de Solde (Actions) --- */
+.gj-balances-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.balance-box {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 10px;
+  border-radius: 15px;
+}
+
+.balance-box .label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  font-weight: 900;
+  color: #6366f1;
+  margin-bottom: 5px;
+  display: block;
+}
+
+.balance-box.bonus .label { color: #facc15; }
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.controls button {
+  background: #334155;
+  border: none;
+  color: white;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.controls button:active { transform: scale(0.9); }
+.controls button.minus { background: #ef4444; }
+
+.controls .val {
+  font-family: 'Courier New', monospace;
+  font-weight: 900;
+  font-size: 1.1rem;
+}
+
+/* --- Popups Carte --- */
+.gj-popup .leaflet-popup-content-wrapper {
+  background: #1e293b;
+  color: white;
+  border-radius: 12px;
+}
+
+.gj-popup .leaflet-popup-tip { background: #1e293b; }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .gestion-jetons-wrapper { flex-direction: column; }
+  .gj-container { width: 100%; height: 50%; }
+  .gj-map-zone { height: 50%; }
+}

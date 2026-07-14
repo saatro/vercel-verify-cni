@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import "react-spring-bottom-sheet/dist/style.css";
+
+
+/* Your global styles after Tailwind, if needed */
+html, body, #root { height: 100%; }

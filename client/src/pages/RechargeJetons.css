@@ -1,0 +1,186 @@
+/* --- Global Container and Header --- */
+.recharge-container {
+    max-width: 500px;
+    margin: 13px auto;
+    padding: 5px;
+    background-color: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+    font-family: 'Arial', sans-serif;
+}
+
+.recharge-header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 10px;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 5px;
+}
+
+.recharge-header h2 {
+    font-size: 1.1rem;
+    color: #343a40;
+    margin: 0;
+}
+
+.icon-main {
+    font-size: 1.2rem;
+    color: #007bff; /* Bleu principal */
+}
+
+.current-balance-info {
+    text-align: center;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.current-balance-info p {
+    margin: 0;
+    color: #6c757d;
+    font-size: 1rem;
+}
+
+.current-balance-info strong {
+    color: #28a745; /* Vert pour le solde positif */
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+
+/* --- Form Elements --- */
+
+.recharge-form-jetons {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #495057;
+    font-size: 0.95rem;
+}
+
+.form-group input[type="text"] {
+    padding: 12px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    transition: border-color 0.3s;
+    text-align: right;
+    font-weight: bold;
+}
+
+.form-group input[type="text"]:focus {
+    border-color: #007bff;
+    outline: none;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.form-group small {
+    margin-top: 5px;
+    color: #6c757d;
+    font-size: 0.85rem;
+}
+
+/* File Upload Specific Styles */
+.file-group input[type="file"] {
+    padding: 10px 0; /* Espacement uniquement vertical */
+}
+
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #e6f7e9;
+    border: 1px solid #c3e6cb;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+.check-icon {
+    color: #28a745;
+    font-size: 1.2rem;
+}
+
+/* --- Recap Box --- */
+.recap-box {
+    padding: 15px;
+    border: 1px solid #ffeeba;
+    background-color: #fff3cd;
+    border-left: 5px solid #ffc107;
+    border-radius: 8px;
+    margin-top: 10px;
+}
+
+.recap-box h3 {
+    margin-top: 0;
+    color: #856404;
+    font-size: 1.1rem;
+}
+
+.recap-box p {
+    margin: 5px 0;
+    font-size: 0.95rem;
+    color: #856404;
+}
+
+/* --- Submission Button --- */
+
+.btn-submit-recharge {
+    padding: 15px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.3s, opacity 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.btn-submit-recharge:hover:not(:disabled) {
+    background-color: #0056b3;
+}
+
+.btn-submit-recharge:disabled {
+    background-color: #a0c3e8;
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+/* --- Status Messages --- */
+.status-message {
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 20px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.status-message.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.status-message.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}

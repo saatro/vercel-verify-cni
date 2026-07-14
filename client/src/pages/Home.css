@@ -1,0 +1,87 @@
+/* Reset basique */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: Arial, sans-serif;
+}
+
+body, html {
+  height: 100%;
+  width: 100%;
+}
+
+/* Home */
+.home-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: linear-gradient(135deg, #fdfdfd, #e2e2e2);
+  padding: 20px;
+}
+
+.home-panel {
+  background-color: #dbd9d92d;
+  color: #4e4e4e;
+  padding: 40px 30px;
+  border-radius: 20px;
+  max-width: 400px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.home-panel h2 {
+  margin-bottom: 20px;
+  font-size: 1.8rem;
+  color: #504f4f;
+}
+
+.home-panel p {
+  margin-bottom: 30px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.home-panel button {
+  background-color: #449afc;
+  color: rgb(252, 251, 251);
+  border: none;
+  padding: 12px 25px;
+  font-size: 0.8rem;
+  font-weight: thin;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.home-panel button:hover {
+  background-color: #66d0fa;
+}
+
+/* PageCommandeClient */
+.client-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ClientHome */
+.client-order-info {
+  background-color: #2d3748;
+  color: white;
+  padding: 15px;
+}
+
+.client-order-info h2 {
+  margin-bottom: 10px;
+}
+
+.client-order-info p {
+  font-size: 0.95rem;
+  margin-bottom: 5px;
+}
+
+.client-map {
+  flex: 1;
+}

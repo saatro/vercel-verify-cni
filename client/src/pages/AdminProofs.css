@@ -1,0 +1,112 @@
+/* --- Structure Globale --- */
+.proofs-page {
+  padding: 24px;
+  background: #f1f5f9; /* Un gris bleuté plus moderne */
+  min-height: 100vh;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.proofs-page h2 {
+  margin-bottom: 24px;
+  color: #0f172a;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* --- Cartes de Transactions --- */
+.proofs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.proof-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: white;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  border-left: 6px solid #94a3b8; /* Couleur par défaut (en attente) */
+  transition: all 0.2s ease-in-out;
+}
+
+/* Couleurs dynamiques selon le statut */
+.proof-card.validé { border-left-color: #10b981; }
+.proof-card.rejeté { border-left-color: #ef4444; }
+.proof-card.en_attente { border-left-color: #f59e0b; }
+
+.proof-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* --- Image du Reçu --- */
+.proof-img {
+  width: 70px;
+  height: 70px;
+  object-fit: cover;
+  border-radius: 10px;
+  cursor: zoom-in;
+  border: 1px solid #e2e8f0;
+}
+
+/* --- Détails --- */
+.proof-details {
+  flex: 1;
+}
+
+.proof-details p {
+  margin: 2px 0;
+  color: #475569;
+  font-size: 14px;
+}
+
+.amount-text {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+/* --- Badges de Statut --- */
+.status-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-tag.validé { background: #dcfce7; color: #15803d; }
+.status-tag.rejeté { background: #fee2e2; color: #b91c1c; }
+.status-tag.en_attente { background: #fef3c7; color: #92400e; }
+
+/* --- Texte de motif de refus --- */
+.reason-text {
+  margin-top: 5px !important;
+  padding: 6px 10px;
+  background: #fff1f2;
+  border-radius: 6px;
+  color: #be123c !important;
+  font-style: italic;
+}
+
+/* --- Responsive --- */
+@media (max-width: 600px) {
+  .proof-card {
+    flex-direction: column;
+    text-align: center;
+    padding: 20px;
+  }
+  .proof-img {
+    width: 120px;
+    height: 120px;
+  }
+}

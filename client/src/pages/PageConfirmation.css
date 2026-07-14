@@ -1,0 +1,424 @@
+/* ========================================
+   STRUCTURE GLOBALE & SCROLL
+   ======================================== */
+.confirmation-page {
+  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  padding-bottom: 40px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+/* Scrollbar Webkit (Chrome, Safari, Edge) */
+.confirmation-page::-webkit-scrollbar {
+  width: 6px;
+}
+.confirmation-page::-webkit-scrollbar-track {
+  background: transparent;
+}
+.confirmation-page::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+.confirmation-page::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.confirmation-container {
+  width: 100%;
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+}
+
+/* ========================================
+   HEADER
+   ======================================== */
+.confirmation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px;
+  margin-top: 13px;
+}
+
+.confirmation-subtitle {
+  font-size: 8px;
+  font-weight: 800;
+  color: #ee7505;
+  text-transform: uppercase;
+  font-style: italic;
+  letter-spacing: 0.3em;
+  display: block;
+}
+
+.confirmation-title {
+  font-weight: 700;
+  font-style: italic;
+  text-transform: uppercase;
+  color: #2e4069;
+  letter-spacing: -0.05em;
+  margin: 0;
+}
+
+.confirmation-icon {
+  background: #e67c03;
+  color: white;
+  padding: 10px;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ========================================
+   CARD PRINCIPALE
+   ======================================== */
+.confirmation-card {
+  background: white;
+  border-radius: 45px;
+  padding: 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.08);
+  border: 1px solid white;
+}
+
+/* PREVIEW VÉHICULE */
+.vehicle-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.vehicle-image-wrapper {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 15px;
+}
+
+.vehicle-glow {
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  filter: blur(50px);
+  opacity: 0.2;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.vehicle-image {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 280px;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 15px 25px rgba(0, 0, 0, 0.15));
+}
+
+.vehicle-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: white;
+  border: 2px solid;
+  border-radius: 50px;
+  padding: 6px 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin-top: -10px;
+  z-index: 15;
+}
+
+.vehicle-badge span {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+/* INFO VÉHICULE */
+.vehicle-info {
+  border-radius: 20px;
+  padding: 15px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.vehicle-description {
+  font-size: 11px;
+  color: #475569;
+  line-height: 1.5;
+  font-style: italic;
+  font-weight: 500;
+  margin: 0;
+}
+
+.vehicle-features {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.feature-tag {
+  font-size: 9px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 4px 10px;
+  border-radius: 8px;
+  color: #334155;
+  border: 1px solid rgba(0,0,0,0.05);
+}
+
+/* ========================================
+   ROUTE INFO
+   ======================================== */
+.route-info {
+  position: relative;
+  padding: 0 8px;
+  margin-bottom: 25px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.route-line {
+  position: absolute;
+  left: 23px;
+  top: 24px;
+  bottom: 24px;
+  width: 1px;
+  border-left: 1px dashed #cbd5e1;
+}
+
+.route-point {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  z-index: 10;
+}
+
+.route-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.route-icon.pickup {
+  background: #f0f4ff;
+  color: #6366f1;
+}
+
+.route-icon.dropoff {
+  background: #0f172a;
+  color: white;
+}
+
+.route-label {
+  font-size: 8px;
+  font-weight: 900;
+  color: #94a3b8;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.route-address {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ========================================
+   PRIX & PAIEMENT
+   ======================================== */
+.price-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 20px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.price-label-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.price-label {
+  font-size: 9px;
+  font-weight: 900;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.price-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.price-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.price-currency {
+  font-size: 12px;
+  font-weight: 900;
+  color: #10b981;
+}
+
+.payment-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  color: #475569;
+  padding: 6px 12px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.payment-badge span {
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+/* ========================================
+   NÉGOCIATION (MODE ARRANGEMENT)
+   ======================================== */
+.negotiation-badge {
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+}
+
+.arrangement-notice {
+  font-size: 9px;
+  color: #8b5cf6;
+  font-weight: 700;
+  margin-top: 5px;
+  display: block;
+  animation: pulse-arrangement 2s infinite;
+}
+
+@keyframes pulse-arrangement {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.02); }
+}
+
+.arrangement-box {
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 15px;
+  padding: 15px;
+  margin-top: 15px;
+}
+
+.arrangement-box h4 {
+  color: #7c3aed;
+  font-size: 12px;
+  margin: 0 0 10px 0;
+}
+
+.arrangement-box ul li {
+  font-size: 10px;
+  color: #6d28d9;
+  margin-bottom: 4px;
+  list-style: none;
+}
+
+/* ========================================
+   ACTIONS & BOUTONS
+   ======================================== */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.confirm-button {
+  width: 100%;
+  height: 55px;
+  border-radius: 18px;
+  border: none;
+  font-size: 14px;
+  font-weight: 900;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.confirm-button:active {
+  transform: scale(0.96);
+}
+
+.confirm-button.loading {
+  opacity: 0.8;
+  cursor: not-allowed;
+}
+
+.spinner-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.back-button {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  padding: 10px;
+}
+
+/* ========================================
+   RESPONSIVE
+   ======================================== */
+@media (max-width: 480px) {
+  .confirmation-page { padding: 15px; }
+  .confirmation-title { font-size: 24px; }
+  .vehicle-image { max-width: 220px; }
+  .price-value { font-size: 30px; }
+}

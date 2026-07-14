@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#FF0000" />
+  <title>Mambo - Livraison & VTC</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@900&display=swap" rel="stylesheet">
+
+  <style>
+    body,
+    html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #f80303;
+      overflow: hidden;
+    }
+
+    #splash-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+    }
+
+    /* --- TYPOGRAPHIE : ALLONGÉ, COMPACT, ULTRA-ITALIQUE --- */
+    .mambo-text {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 17vw;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: -1.4vw;
+
+      /* Allongé verticalement, compressé horizontalement, et incliné */
+      transform: scaleY(1.4) scaleX(0.85) skewX(-17deg);
+
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      white-space: nowrap;
+      text-align: center;
+    }
+
+    .mambo-text span {
+      display: block;
+      margin-top: -2%;
+    }
+
+    /* 1. COUCHE DU BAS (BLANCHE) - AGRANDIE POUR ÉVITER LES BORDS */
+    .layer-bottom {
+      background-color: #FFFFFF;
+      color: #FF0000;
+      z-index: 1;
+      position: absolute;
+      top: -50%;
+      bottom: -50%;
+      left: -100%;
+      right: -100%;
+    }
+
+    /* 2. COUCHE DU HAUT (ROUGE) - AGRANDIE ÉGALEMENT */
+    .layer-top {
+      background-color: #FF0000;
+      color: #FFFFFF;
+      z-index: 2;
+      position: absolute;
+      top: -50%;
+      bottom: -50%;
+      left: -100%;
+      right: -100%;
+
+      /* Masque diagonal initial (Couvre tout l'écran) */
+      clip-path: polygon(-50% 0%, 250% 0%, 250% 100%, -50% 100%);
+      transition: clip-path 2s cubic-bezier(0.7, 0, 0.2, 1);
+    }
+
+    /* --- ANIMATION BALAYAGE --- */
+    #splash-screen.swipe-active .layer-top {
+      /* La lame diagonale se retire vers le haut-gauche */
+      clip-path: polygon(-150% 0%, -150% 0%, 0% 100%, 0% 100%);
+    }
+
+    /* Apparition du texte */
+    .mambo-text span {
+      opacity: 0;
+      animation: fadeIn 0.8s ease-out 0.5s forwards;
+    }
+
+    @keyframes fadeIn {
+      to {
+        opacity: 1;
+      }
+    }
+
+    /* Sortie finale du splash */
+    .fade-out {
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.8s ease-out;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="splash-screen">
+    <div class="mambo-text layer-bottom">
+      <span>MAMBO</span>
+    </div>
+
+    <div class="mambo-text layer-top">
+      <span>MAMBO</span>
+    </div>
+  </div>
+
+  <div id="root"></div>
+
+  <script>
+    const splash = document.getElementById('splash-screen');
+
+    // Déclencher le balayage lent
+    setTimeout(() => {
+      splash.classList.add('swipe-active');
+    }, 1600);
+
+    // Transition finale vers l'app
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        splash.classList.add('fade-out');
+        setTimeout(() => splash.remove(), 700);
+      }, 3600);
+    });
+  </script>
+
+</body>
+
+</html>

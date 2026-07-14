@@ -1,0 +1,29 @@
+.option-card {
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  padding: 14px;
+  margin: 10px 0;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  display: flex;
+  flex-direction: column;
+}
+
+.option-card:hover {
+  background-color: #f9f9f9;
+}
+
+.option-card.selected {
+  border-color: #e63946;
+  background-color: #ffe5e5;
+}
+
+.option-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.option-icon {
+  font-size: 1.5rem;
+}

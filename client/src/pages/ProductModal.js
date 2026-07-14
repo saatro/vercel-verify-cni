@@ -1,0 +1,283 @@
+import React, { useState, useEffect } from 'react';
+import { db } from '../firebase';
+import { 
+  doc, collection, addDoc, updateDoc, serverTimestamp 
+} from 'firebase/firestore'; 
+import { X, Loader2 } from 'lucide-react';
+import { toast } from 'react-toastify';
+import CategorieDynamique from '../components/CategorieDynamique';
+import { uploadToCloudinary } from '../utils/cloudinary';
+
+// ── Configuration Unifiée des Champs Spécifiques par Catégorie ────────────────
+const CATEGORY_FIELDS = {
+  immobilier: [
+    { id: 'type_immo', label: 'Nature du bien', type: 'select', options: ['Appartement', 'Villa', 'Terrain', 'Bureau', 'Magasin'] },
+    { id: 'transaction', label: 'Type de contrat', type: 'select', options: ['Vente', 'Location', 'Location courte durée'] },
+    { id: 'pieces', label: 'Nombre de pièces', type: 'select', options: ['Studio', '2 pces', '3 pces', '4 pces', '5 pces+'] },
+    { id: 'surface', label: 'Surface (m²)', type: 'text', placeholder: 'Ex: 150' },
+    { id: 'localisation', label: 'Quartier / Zone', type: 'text', placeholder: 'Ex: Riviera 3' }
+  ],
+  vehicule: [ 
+    { id: 'marque_auto', label: 'Marque', type: 'text', placeholder: 'Ex: Toyota' },
+    { id: 'modele_annee', label: 'Modèle & Année', type: 'text', placeholder: 'Ex: Tucson 2018' },
+    { id: 'boite', label: 'Transmission', type: 'select', options: ['Automatique', 'Manuelle'] },
+    { id: 'energie', label: 'Carburant', type: 'select', options: ['Essence', 'Diesel', 'Hybride'] },
+    { id: 'etat_auto', label: 'État actuel', type: 'select', options: ['Dédouané', 'Immatriculé', 'Occasion Europe'] }
+  ],
+  supermarket: [
+    { id: 'marque', label: 'Marque de l\'article', type: 'text', placeholder: 'Ex: Nestlé, Danone...' },
+    { id: 'unite', label: 'Unité de vente (Affiché sur la carte prix)', type: 'select', options: ['Kg', 'Litre', 'Bouteille', 'Paquet', 'Gramme', 'Pièce', 'Canette', 'Pack'] },
+    { id: 'poidsVolume', label: 'Contenance / Volume exact', type: 'text', placeholder: 'Ex: 500g, 1.5L...' },
+    { id: 'conditionnement', label: 'Format de distribution', type: 'text', placeholder: 'Ex: Brique en carton, Plastique Recyclé' },
+    { id: 'temperature', label: 'Condition de Conservation', type: 'select', options: ['Ambiant', 'Frais (0°C à 4°C)', 'Surgelé (-18°C)', 'Sec & Sombre'] },
+    { id: 'datelimit', label: 'Date Limite (DLC / DLUO)', type: 'text', placeholder: 'Ex: Fin Décembre 2026 ou DD/MM/AAAA' },
+    { id: 'allergenes', label: 'Traces d\'allergènes', type: 'text', placeholder: 'Ex: Contient du gluten, lactose, fruits à coque' },
+    { id: 'code_barre', label: 'Code-barres / EAN', type: 'text', placeholder: 'Ex: 3017620422003' },
+    { id: 'reference', label: 'Référence Interne SKU', type: 'text', placeholder: 'Ex: SUP-NET-098' }
+  ]
+};
+
+export default function ProductModal({ vendorId, product, onClose }) {
+  const [loading, setLoading] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  
+  const [f, setF] = useState({ 
+    nom: '', prix: '', stock: '', images: [], 
+    description: '', categorie: '', detailsSpecifiques: {},
+    type: '', marque: '', unite: '', poidsVolume: '', 
+    conditionnement: '', temperature: '', datelimit: '', 
+    allergenes: '', code_barre: '', reference: ''
+  });
+
+  useEffect(() => {
+    if (product) {
+      setF({ 
+        ...product, 
+        images: Array.isArray(product.images) ? product.images : [], 
+        detailsSpecifiques: product.detailsSpecifiques || {},
+        type: product.type || product.categorie || '',
+        marque: product.marque || '',
+        unite: product.unite || '',
+        poidsVolume: product.poidsVolume || '',
+        conditionnement: product.conditionnement || '',
+        temperature: product.temperature || '',
+        datelimit: product.datelimit || '',
+        allergenes: product.allergenes || '',
+        code_barre: product.code_barre || '',
+        reference: product.reference || ''
+      });
+      setIsDrawerOpen(true);
+    }
+  }, [product]);
+
+  const handleCategorySelect = (catId) => {
+    setF(prev => ({ 
+      ...prev, 
+      categorie: catId, 
+      type: catId === 'supermarket' ? 'supermarche' : catId,
+      detailsSpecifiques: {} 
+    }));
+    setIsDrawerOpen(true);
+  };
+
+  const handleSpecChange = (id, value) => {
+    if (f.categorie === 'supermarket') {
+      setF(prev => ({ ...prev, [id]: value }));
+    } else {
+      setF(prev => ({
+        ...prev,
+        detailsSpecifiques: { ...prev.detailsSpecifiques, [id]: value }
+      }));
+    }
+  };
+
+  const save = async () => {
+    if (!f.nom || !f.prix || !f.categorie) return toast.error("Informations manquantes");
+    setLoading(true);
+    try {
+      const uploadedUrls = [];
+      
+      for (const img of f.images) {
+        if (typeof img === 'string' && img.startsWith('data:image')) {
+          const response = await fetch(img);
+          const blob = await response.blob();
+          const file = new File([blob], "product.jpg", { type: "image/jpeg" });
+          const url = await uploadToCloudinary(file);
+          uploadedUrls.push(url);
+        } else {
+          uploadedUrls.push(img);
+        }
+      }
+
+      const payload = {
+        nom: f.nom,
+        prix: Number(f.prix),
+        stock: Number(f.stock) || 0,
+        images: uploadedUrls,
+        description: f.description || "",
+        categorie: f.categorie,
+        vendorId: vendorId,
+        updatedAt: serverTimestamp()
+      };
+
+      if (f.categorie === 'supermarket') {
+        payload.type = 'supermarche';
+        payload.marque = f.marque || "";
+        payload.unite = f.unite || "";
+        payload.poidsVolume = f.poidsVolume || "";
+        payload.conditionnement = f.conditionnement || "";
+        payload.temperature = f.temperature || "";
+        payload.datelimit = f.datelimit || "";
+        payload.allergenes = f.allergenes || "";
+        payload.code_barre = f.code_barre || "";
+        payload.reference = f.reference || "";
+        payload.detailsSpecifiques = {}; 
+      } else {
+        payload.type = f.categorie;
+        payload.detailsSpecifiques = f.detailsSpecifiques;
+      }
+
+      if (product?.id) {
+        await updateDoc(doc(db, 'products', product.id), payload);
+        toast.success("Annonce mise à jour");
+      } else {
+        await addDoc(collection(db, 'products'), { ...payload, createdAt: serverTimestamp() });
+        toast.success("Annonce publiée");
+      }
+      onClose();
+    } catch (e) {
+      console.error("Erreur d'enregistrement Firestore:", e);
+      toast.error("Erreur lors de l'enregistrement");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="m-modal-fs">
+      <div className="m-modal-header">
+        <button onClick={onClose} className="m-close-btn" style={{ border: 'none', background: 'none' }}>
+          <X size={24}/>
+        </button>
+        <h3 style={{ fontWeight: 800 }}>{!isDrawerOpen ? "Catégorie" : "Détails de l'offre"}</h3>
+        <button onClick={save} className="m-save-text-btn" disabled={loading}>
+          {loading ? <Loader2 className="animate-spin" size={18}/> : 'Enregistrer'}
+        </button>
+      </div>
+
+      <div className="m-modal-scroll-body">
+        {!isDrawerOpen ? (
+          <div className="m-category-selection-wrapper fade-in">
+            <CategorieDynamique 
+              categorie={f.categorie} 
+              onSelect={handleCategorySelect} 
+              mode="selection"
+            />
+          </div>
+        ) : (
+          <div className="m-form-container-v4 fade-in" style={{ padding: '0 5px 40px' }}>
+            
+            <CategorieDynamique 
+              categorie={f.categorie} 
+              mode="photos-only" 
+              images={f.images} 
+              setImages={(imgs) => setF(prev => ({ ...prev, images: typeof imgs === 'function' ? imgs(prev.images) : imgs }))}
+              limit={(f.categorie === 'immobilier' || f.categorie === 'vehicule') ? 5 : 1}
+            />
+
+            {/* Infomations Générales Obligatoires de l'Annonce */}
+            <div className="m-specs-container" style={{ marginTop: '15px' }}>
+              <div className="m-dynamic-fields-divider">
+                <span>INFORMATIONS GÉNÉRALES</span>
+              </div>
+              
+              <div className="m-input-group-v4">
+                <label style={{ fontSize: '10px' }}>Nom du produit / Titre de l'annonce *</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Huile de Tournesol, Studio meublé..." 
+                  value={f.nom} 
+                  onChange={e => setF(prev => ({ ...prev, nom: e.target.value }))}
+                  style={{ padding: '10px', fontSize: '14px' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+                <div className="m-input-group-v4">
+                  <label style={{ fontSize: '10px' }}>Prix (FCFA) *</label>
+                  <input 
+                    type="number" 
+                    placeholder="Ex: 5000" 
+                    value={f.prix} 
+                    onChange={e => setF(prev => ({ ...prev, prix: e.target.value }))}
+                    style={{ padding: '10px', fontSize: '14px' }}
+                  />
+                </div>
+                <div className="m-input-group-v4">
+                  <label style={{ fontSize: '10px' }}>Quantité en stock</label>
+                  <input 
+                    type="number" 
+                    placeholder="Ex: 12" 
+                    value={f.stock} 
+                    onChange={e => setF(prev => ({ ...prev, stock: e.target.value }))}
+                    style={{ padding: '10px', fontSize: '14px' }}
+                  />
+                </div>
+              </div>
+
+              <div className="m-input-group-v4" style={{ marginTop: '12px' }}>
+                <label style={{ fontSize: '10px' }}>Description détaillée</label>
+                <textarea 
+                  placeholder="Décrivez votre article ici..." 
+                  value={f.description} 
+                  onChange={e => setF(prev => ({ ...prev, description: e.target.value }))}
+                  style={{ padding: '10px', fontSize: '14px', width: '100%', minHeight: '80px', border: '1px solid #e2e8f0', borderRadius: '8px', fontFamily: 'inherit', resize: 'vertical' }}
+                />
+              </div>
+            </div>
+
+            {/* Spécificités Additionnelles selon la Catégorie choisie */}
+            {CATEGORY_FIELDS[f.categorie] && (
+              <div className="m-specs-container" style={{ marginTop: '20px' }}>
+                <div className="m-dynamic-fields-divider">
+                  <span>INFO {f.categorie.toUpperCase()}</span>
+                </div>
+                <div className="m-dynamic-grid">
+                  {CATEGORY_FIELDS[f.categorie].map(field => {
+                    const currentValue = f.categorie === 'supermarket' 
+                      ? (f[field.id] || '') 
+                      : (f.detailsSpecifiques[field.id] || '');
+
+                    return (
+                      <div key={field.id} className="m-input-group-v4">
+                        <label style={{ fontSize: '10px' }}>{field.label}</label>
+                        {field.type === 'select' ? (
+                          <select 
+                            className="m-select-custom"
+                            value={currentValue}
+                            onChange={e => handleSpecChange(field.id, e.target.value)}
+                          >
+                            <option value="">--</option>
+                            {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                          </select>
+                        ) : (
+                          <input 
+                            type="text"
+                            placeholder={field.placeholder}
+                            value={currentValue}
+                            onChange={e => handleSpecChange(field.id, e.target.value)}
+                            style={{ padding: '10px', fontSize: '14px' }}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

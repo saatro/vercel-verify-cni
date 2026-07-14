@@ -1,0 +1,40 @@
+.cart-floating-button {
+  position: fixed;
+  bottom: 30px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 34%;
+  background: #e7e7e7ce; /* Couleur Mambo */
+  border: none;
+  box-shadow: 0 8px 8px rgba(70, 70, 69, 0.140);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2000;
+  transition: transform 0.2s ease;
+}
+
+.cart-floating-button:active {
+  transform: scale(0.9);
+}
+
+.cart-icon-wrapper {
+  position: relative;
+}
+
+.cart-badge {
+  position: absolute;
+  top: -17px;
+  right: -13px;
+  background: #ff0000;
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 10px;
+  border: 2px solid #f9f9fa;
+  min-width: 18px;
+  text-align: center;
+}

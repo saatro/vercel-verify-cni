@@ -1,0 +1,96 @@
+/* Parametres.css */
+.parametre-page {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start; /* Aligné en haut pour le défilement mobile */
+  min-height: 100vh;
+  background: #f8fafc;
+  padding: 20px;
+  position: relative;
+  z-index: 10; /* Assure d'être au-dessus du fond */
+}
+
+.parametre-content {
+  background: #ffffff;
+  padding: 25px;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 450px;
+  margin-top: 20px;
+}
+
+/* Thème Sombre */
+.dark-theme .parametre-page { background-color: #0f172a; }
+.dark-theme .parametre-content { 
+  background-color: #1e293b; 
+  color: #f1f5f9; 
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  width: 100%;
+}
+
+.group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #6366f1;
+  text-transform: uppercase;
+}
+
+.parametre-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.parametre-section label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* LE BOUTON : Correction du style "grisé" */
+.button-save {
+  width: 100%;
+  height: 50px;
+  background: #6366f1 !important; /* Force la couleur indigo */
+  color: white !important;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.2s ease;
+  margin-top: 10px;
+  opacity: 1 !important; /* Force l'opacité */
+}
+
+.button-save:hover {
+  background: #4f46e5 !important;
+  transform: translateY(-2px);
+}
+
+.button-save:active {
+  transform: scale(0.98);
+}
+
+.separator {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 10px 0;
+}

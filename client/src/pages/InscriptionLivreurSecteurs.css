@@ -1,0 +1,334 @@
+/* --- Master Wrapper Premium --- */
+.auth-master-wrapper {
+  background: radial-gradient(circle at top right, #1e293b, #0f172a);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+/* Zone de scroll fluide masquant la scrollbar native */
+.scrollable-auth-zone {
+  width: 100%;
+  max-width: 460px;
+  max-height: 95vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.scrollable-auth-zone::-webkit-scrollbar {
+  width: 5px;
+}
+.scrollable-auth-zone::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollable-auth-zone::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 5px;
+}
+
+/* --- Carte d'Inscription --- */
+.reg-card {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+  padding: 32px 24px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+  color: #f1f5f9;
+}
+
+.reg-card h2 {
+  margin: 13   px 0 16px 0;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+}
+
+.sector-subtitle {
+  text-align: center;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-bottom: 28px;
+}
+
+/* --- Bouton Retour Épuré --- */
+.back-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  color: #cbd5e1;
+  padding: 10px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  transition: all 0.2s ease;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  transform: translateX(-2px);
+}
+
+/* --- Formulaire & Champs de Saisie --- */
+input, select {
+  width: 100%;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 14px;
+  color: #ffffff;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+input:focus, select:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+  background: #1e293b;
+}
+
+input::placeholder {
+  color: #64748b;
+}
+
+/* --- Sélection des Véhicules Horizontale --- */
+.vehicle-selection-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 12px;
+  margin-bottom: 8px;
+}
+
+.vehicle-grid {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: none; /* Masque sur Firefox */
+}
+
+.vehicle-grid::-webkit-scrollbar {
+  display: none; /* Masque sur Chrome/Safari */
+}
+
+.v-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 10px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 16px;
+  color: #94a3b8;
+  cursor: pointer;
+  flex: 1;
+  min-width: 85px;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.v-btn img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+}
+
+.v-btn span {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.v-btn:hover {
+  border-color: #475569;
+  color: #cbd5e1;
+}
+
+.v-btn.active {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  box-shadow: inset 0 0 12px rgba(16, 185, 129, 0.05);
+}
+
+.v-btn.active img {
+  transform: scale(1.08);
+}
+
+/* --- Zone de Verrouillage Pattern --- */
+.pattern-section {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 18px;
+  text-align: center;
+}
+
+.pattern-label {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+/* --- Upload Grid des Documents --- */
+.docs-upload-sec {
+  margin: 24px 0;
+}
+
+.docs-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+
+.docs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.doc-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 12px;
+  background: #0f172a;
+  border: 2px dashed #334155;
+  border-radius: 16px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  color: #94a3b8;
+  transition: all 0.2s ease;
+}
+
+.doc-card svg {
+  width: 22px;
+  height: 22px;
+  color: #64748b;
+  transition: color 0.2s ease;
+}
+
+.doc-card:hover {
+  border-color: #475569;
+  background: #141e33;
+}
+
+.doc-card.is-active {
+  border-style: solid;
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.05);
+  color: #10b981;
+}
+
+.doc-card.is-active svg {
+  color: #10b981;
+}
+
+/* --- Checkboxes Options & Contrats --- */
+.checkbox-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  margin: 16px 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-wrap input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0 0;
+  accent-color: #10b981;
+  cursor: pointer;
+}
+
+.contract-wrap span {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+/* --- Boutons d'Action Principaux --- */
+.google-btn {
+  width: 100%;
+  padding: 14px;
+  margin-bottom: 20px;
+  background: #ffffff;
+  color: #1e293b;
+  border: none;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.google-btn:hover {
+  background: #f8fafc;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.15);
+}
+
+.submit-btn {
+  width: 100%;
+  padding: 16px;
+  background: #10b981;
+  border: none;
+  border-radius: 14px;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.025em;
+  cursor: pointer;
+  margin-top: 20px;
+  box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3);
+  transition: all 0.2s ease;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 20px -3px rgba(16, 185, 129, 0.4);
+}
+
+.submit-btn:disabled {
+  background: #334155;
+  color: #64748b;
+  cursor: not-allowed;
+  box-shadow: none;
+}
