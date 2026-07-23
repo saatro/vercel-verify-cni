@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom"; 
-import { collection, onSnapshot, query, where, doc } from "firebase/firestore";
+import { collection, onSnapshot, query, where, doc, updateDoc } from "firebase/firestore";
 import L from "leaflet";
 import { MapContainer, Marker, Polyline, TileLayer, useMap, Popup } from "react-leaflet";
 import { 
   X, Navigation, MapPin, Menu, Target, Route, Banknote, Zap, User, Phone, Map, Plus, Minus
 } from "lucide-react"; 
 import { auth, db } from "../firebase"; 
+import { serverTimestamp } from 'firebase/firestore'; // Ajoute serverTimestamp ici si manquant
 import { toast } from "react-toastify";
 import "./ClientHome.css";
 import SideNav from "../components/SideNav"; 
@@ -287,61 +288,61 @@ export default function ClientHome() {
     return Math.ceil(finalPrice / 100) * 100;
   }, [configVehicules, distanceKm, urbanNegoPrice]);
 
-// Force MotoNoStress + géocodage destination pour commande tiers
-useEffect(() => {
-  if (isTiersFromVendeur) {
-    setSelectedVehicle("MotoNoStress");
-    setActiveFilter("moto");
-    toast.info("🚀 Mode Tiers activé - Moto NoStress (1000 F) sélectionnée par défaut", { autoClose: 4000 });
+  // Force MotoNoStress + géocodage destination pour commande tiers
+  useEffect(() => {
+    if (isTiersFromVendeur) {
+      setSelectedVehicle("MotoNoStress");
+      setActiveFilter("moto");
+      toast.info("🚀 Mode Tiers activé - Moto NoStress (1000 F) sélectionnée par défaut", { autoClose: 4000 });
 
-    // Géocodage automatique de la destination si elle est pré-remplie
-    const prefilledDest = location.state?.targetDestination || location.state?.destination || location.state?.dropoffAddress;
-    if (prefilledDest && !destPos) {
-      (async () => {
-        try {
-          const suffix = " Côte d'Ivoire";
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(prefilledDest + suffix)}`
-          );
-          const data = await res.json();
-          if (data?.[0]) {
-            setDestPos([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
-            setDest(prefilledDest);
+      // Géocodage automatique de la destination si elle est pré-remplie
+      const prefilledDest = location.state?.targetDestination || location.state?.destination || location.state?.dropoffAddress;
+      if (prefilledDest && !destPos) {
+        (async () => {
+          try {
+            const suffix = " Côte d'Ivoire";
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(prefilledDest + suffix)}`
+            );
+            const data = await res.json();
+            if (data?.[0]) {
+              setDestPos([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
+              setDest(prefilledDest);
+            }
+          } catch (e) {
+            console.error("Géocodage destination tiers échoué", e);
           }
-        } catch (e) {
-          console.error("Géocodage destination tiers échoué", e);
-        }
-      })();
+        })();
+      }
     }
-  }
-}, [isTiersFromVendeur, location.state, destPos]);
+  }, [isTiersFromVendeur, location.state, destPos]);
 
   useEffect(() => {
     let unsubProfile = null;
     let unsubDrivers = null;
- 
+  
     const unsubAuth = auth.onAuthStateChanged(u => {
       setCurrentUser(u);
       if (unsubProfile) { unsubProfile(); unsubProfile = null; }
       if (unsubDrivers) { unsubDrivers(); unsubDrivers = null; }
- 
+  
       if (u) {
         unsubProfile = onSnapshot(doc(db, "users", u.uid), (s) => {
           if (s.exists()) setUserData(s.data());
         });
       }
- 
+  
       const q = query(
         collection(db, "users"),
         where("isOnline", "==", true),
         where("role", "in", ["livreur", "livreur-externe"])
       );
- 
+  
       unsubDrivers = onSnapshot(q, (s) => {
         setOnlineDrivers(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(d => d.lat && d.lng));
       });
     });
- 
+  
     return () => {
       unsubAuth();
       if (unsubProfile) unsubProfile();
@@ -443,6 +444,7 @@ useEffect(() => {
 
     navigate("/confirmation", {
       state: {
+        orderId: state.orderId || null, 
         pickupAddress: pickup,
         destination: dest,
         dropoffAddress: dest,
@@ -496,12 +498,99 @@ useEffect(() => {
     }, CONFIG.DEBOUNCE_DELAY);
   }, [isRuralMode, currentSectorData]);
 
+  const handleSelectSuggestion = (sug) => {
+    setDest(sug.name);
+    setDestPos(sug.coords);
+    setSuggestions([]);
+    setShowSearchUI(false);
+  };
+  
+  // Système d'écoute des messages In-App temps réel pour la page Client
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    let isMounted = true;
+
+    const messagesQuery = query(
+      collection(db, "in_app_messages"),
+      where("recipientId", "==", auth.currentUser.uid),
+      where("status", "==", "unread")
+    );
+
+    const unsubscribeInApp = onSnapshot(messagesQuery, (snapshot) => {
+      if (!isMounted) return;
+      snapshot.docs.forEach(async (messageDoc) => {
+        const messageData = messageDoc.data();
+        
+        // Affichage de l'alerte locale via le toast de la page
+        toast.info(messageData.body || "Nouveau message reçu", { autoClose: 5000 });
+
+        try {
+          // Passage immédiat du statut à "read" pour couper les boucles de doublons
+          await updateDoc(doc(db, "in_app_messages", messageDoc.id), {
+            status: "read",
+            readAt: new Date()
+          });
+        } catch (err) {
+          console.error("Erreur mise à jour statut message In-App:", err);
+        }
+      });
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribeInApp();
+    };
+  }, []);
+
+// Extraction de la variable pour validation statique par ESLint
+  const fcmUserKey = typeof currentUser !== 'undefined' ? currentUser?.uid : '';
+
+  // Listener Firebase Cloud Messaging (Notifications Push pour Client)
+  useEffect(() => {
+    if (!fcmUserKey) return;
+
+    const requestPushPermission = async () => {
+      try {
+        const { getMessaging, getToken } = await import('firebase/messaging');
+        const messaging = getMessaging();
+        
+        const permission = await Notification.requestPermission();
+        
+        if (permission === 'granted') {
+          const currentToken = await getToken(messaging, { 
+            vapidKey: 'BDE5b26fkUCHbCy7IzjX30eDjJpfQev7GWOrKc6yJxUV48L0XInKEd2urQwzuqUgjQ5UAfP9EcvZ3gtXYI52oII' 
+          });
+          
+          if (currentToken) {
+            await updateDoc(doc(db, "users", fcmUserKey), {
+              fcmToken: currentToken,
+              updatedAt: serverTimestamp()
+            });
+          } else {
+            console.warn('Aucun jeton d\'enregistrement disponible pour le client.');
+          }
+        } else {
+          console.warn('Permission de notification refusée par le client.');
+        }
+      } catch (err) {
+        console.error('Erreur lors de la configuration des notifications Push FCM Client :', err);
+      }
+    };
+
+    requestPushPermission();
+  }, [fcmUserKey]);
+
+  
+
   return (
     <div className="client-home">
       {internalAlert && (
-        <div className={`internal-alert ${internalAlert.type}`}>
-          {internalAlert.message}
-          <button onClick={() => setInternalAlert(null)}><X size={16} /></button>
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[9999] px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 text-xs font-black animate-in fade-in slide-in-from-top-4 duration-200 ${
+          internalAlert.type === 'error' ? 'bg-red-600 text-white' : 
+          internalAlert.type === 'warning' ? 'bg-amber-500 text-white' : 'bg-slate-900 text-white'
+        }`}>
+          <span>{internalAlert.message}</span>
+          <button onClick={() => setInternalAlert(null)} className="p-1 rounded-lg hover:bg-white/20"><X size={14}/></button>
         </div>
       )}
 
@@ -570,8 +659,8 @@ useEffect(() => {
               </label>
             </div>
 
-            <button onClick={() => setShowNegotiationModal(false)} className="confirm-nego-btn" disabled={parseInt(urbanNegoPrice) < getPrice(selectedVehicle)}>
-              CONFIRMER LE PRIX
+            <button onClick={() => setShowNegotiationModal(false)} className="confirm-nego-btn" style={{ background: '#059669' }}>
+              VALIDER MON OFFRE
             </button>
           </div>
         </div>
@@ -676,16 +765,17 @@ useEffect(() => {
           {dest && <X size={18} className="close-search-ui-btn" onClick={() => { setDest(""); setDestPos(null); setRoute([]); }} />}
         </div>
 
+        {/* Suggestion list */}
         {showSearchUI && suggestions.length > 0 && (
-          <div className="search-results-container">
-            {suggestions.map((s, i) => (
-              <div key={i} className="search-result-item" onClick={() => { setDest(s.fullAddress); setDestPos(s.coords); setShowSearchUI(false); }}>
-                <div className="search-result-icon"><MapPin size={18} /></div>
-                <div className="search-result-info">
-                  <span className="search-result-main-text">{s.name}</span>
-                  <span className="search-result-sub-text">{s.district}</span>
+          <div className="suggestions-list">
+            {suggestions.map((sug, idx) => (
+              <button key={idx} className="suggestion-item" onClick={() => handleSelectSuggestion(sug)}>
+                <MapPin size={16} className="icon" />
+                <div className="text-container">
+                  <span className="name">{sug.name}</span>
+                  {sug.district && <span className="sub">{sug.district}</span>}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}

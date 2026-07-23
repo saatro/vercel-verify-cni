@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { doc, getDoc, addDoc, updateDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+
 import { onAuthStateChanged } from 'firebase/auth';
-import { CheckCircle, Loader2, Home, AlertTriangle } from 'lucide-react';
+import { collection, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { AlertTriangle, CheckCircle, Home, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { auth, db } from '../firebase';
 
 export default function Confirmation() {
   const location = useLocation();
@@ -95,8 +96,21 @@ export default function Confirmation() {
         montantLivraison: Number(state.montantLivraison || 0),
       };
 
-      const courseRef = await addDoc(collection(db, "courses"), courseData);
-      setCreatedCourseId(courseRef.id);
+      let finalCourseId = "";
+
+      if (state.orderId) {
+        // ID de course strictement calqué sur l'ID de la commande vendeur pour éviter les 404
+        finalCourseId = state.orderId;
+        const courseRef = doc(db, "courses", finalCourseId);
+        await setDoc(courseRef, courseData);
+      } else {
+        // ID auto-généré classiquement si la course ne découle pas d'une commande vendeur
+        const newCourseRef = doc(collection(db, "courses"));
+        finalCourseId = newCourseRef.id;
+        await setDoc(newCourseRef, courseData);
+      }
+
+      setCreatedCourseId(finalCourseId);
 
       // Si cette course provient d'une commande boutique existante, on la
       // relie et on met à jour son statut pour que le vendeur voie l'avancement.
@@ -104,7 +118,7 @@ export default function Confirmation() {
         try {
           await updateDoc(doc(db, "orders", state.orderId), {
             status: "attente_livreur",
-            linkedCourseId: courseRef.id,
+            linkedCourseId: finalCourseId,
             updatedAt: serverTimestamp(),
           });
         } catch (e) {
@@ -165,9 +179,9 @@ export default function Confirmation() {
         <div className="flex items-center justify-center w-24 h-24 mb-6 rounded-full bg-emerald-50">
           <CheckCircle className="text-emerald-500" size={48} />
         </div>
-        
+
         <h1 className="mb-2 text-2xl font-black uppercase text-slate-900">COMMANDE VALIDÉE</h1>
-        
+
         <p className="mb-8 text-center text-slate-500">
           ID: <span className="font-mono font-bold text-emerald-600">
             {(createdCourseId || orderId)?.slice(-8).toUpperCase() || "SUCCÈS"}
@@ -176,10 +190,10 @@ export default function Confirmation() {
 
         {/* DEBUG */}
         <div style={{ margin: '20px 0', padding: '15px', background: '#f8fafc', borderRadius: '12px', fontSize: '12px', maxWidth: '90%' }}>
-          <strong>Debug - Champs reçus :</strong><br/>
-          Nom : {state.thirdPartyName || "—"}<br/>
-          Téléphone : {state.thirdPartyPhone || "—"}<br/>
-          Destination : {state.dest || state.targetDestination || "—"}<br/>
+          <strong>Debug - Champs reçus :</strong><br />
+          Nom : {state.thirdPartyName || "—"}<br />
+          Téléphone : {state.thirdPartyPhone || "—"}<br />
+          Destination : {state.dest || state.targetDestination || "—"}<br />
           Course Firestore : {createdCourseId ? `créée (${createdCourseId})` : (isBookingPayload ? "en cours..." : "aucune donnée de réservation reçue")}
         </div>
 
@@ -196,7 +210,7 @@ export default function Confirmation() {
           </span>
         </div>
 
-        <button 
+        <button
           onClick={() => navigate('/')}
           className="flex items-center gap-2 mt-12 text-sm font-medium transition-colors text-slate-400 hover:text-slate-900"
         >
@@ -206,3 +220,4 @@ export default function Confirmation() {
     </div>
   );
 }
+

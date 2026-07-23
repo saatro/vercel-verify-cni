@@ -37,7 +37,7 @@ import ImmobilierPage from "./pages/ImmobilierPage";
 import LivreurExterne from "./pages/LivreurHome";   // ou le vrai chemin du fichier
 import LoginClient from "./pages/LoginClient";
 import LoginCoursier from "./pages/LoginCoursier";
-import LoginLivreur from "./pages/LoginLivreur";
+import LoginLivreurSecteurs from "./pages/LoginLivreurSecteurs";
 import LoginMarketplace from "./pages/LoginMarketplace";
 import MarketplaceFull from "./pages/MarketplaceFull";
 import MigrationGPS from "./pages/MigrationGps";
@@ -66,8 +66,8 @@ const EXTERNAL_ROLES = ["livreur-externe"];
 
 export default function App() {
   const [user, setUser]       = useState(null);
-  // Remplacement de la valeur initiale par "loading" pour bloquer le statut "Guest" prématuré
   const [role, setRole]       = useState("loading");
+  const [userZone, setUserZone] = useState("");
   const [loading, setLoading] = useState(true);
   const location = useLocation();
 
@@ -111,11 +111,13 @@ export default function App() {
 
         const waitForDoc = async (retries = 5, delay = 1000) => {
           for (let i = 0; i < retries; i++) {
-            try { 
-              const s = await getDoc(doc(db, "users", firebaseUser.uid)); 
-              if (s.exists()) return s; 
-            } catch {}
-            await new Promise(r => setTimeout(r, delay));
+            for (let j = 0; j < retries; j++) {
+              try { 
+                const s = await getDoc(doc(db, "users", firebaseUser.uid)); 
+                if (s.exists()) return s; 
+              } catch {}
+              await new Promise(r => setTimeout(r, delay));
+            }
           }
           return null;
         };
@@ -130,21 +132,27 @@ export default function App() {
                 if (d.banned) { 
                   await signOut(auth); 
                   setRole("guest"); 
+                  setUserZone("");
                 } else { 
                   setRole(d.role?.toLowerCase().trim() || "client"); 
+                  setUserZone(d.sectorZone || d.zone || "");
                 }
                 setLoading(false);
               } else {
                 const snap = await waitForDoc();
                 if (!isSubscribed) return;
                 if (snap?.exists()) {
-                  setRole(snap.data().role?.toLowerCase().trim() || "client");
+                  const dataSnap = snap.data();
+                  setRole(dataSnap.role?.toLowerCase().trim() || "client");
+                  setUserZone(dataSnap.sectorZone || dataSnap.zone || "");
                 } else { 
                   try { 
                     const cs = await getDoc(doc(db, "coursiers", firebaseUser.uid)); 
                     setRole(cs.exists() ? "coursier" : "client");
+                    setUserZone("");
                   } catch { 
                     setRole("client"); 
+                    setUserZone("");
                   } 
                 }
                 setLoading(false);
@@ -158,10 +166,18 @@ export default function App() {
               try {
                 const snap = await waitForDoc();
                 if (!isSubscribed) return;
-                setRole(snap?.exists() ? (snap.data().role?.toLowerCase().trim() || "client") : "client");
+                if (snap?.exists()) {
+                  const dataSnap = snap.data();
+                  setRole(dataSnap.role?.toLowerCase().trim() || "client");
+                  setUserZone(dataSnap.sectorZone || dataSnap.zone || "");
+                } else {
+                  setRole("client");
+                  setUserZone("");
+                }
               } catch (err) {
                 console.error("Échec critique du fallback :", err);
                 setRole("client");
+                setUserZone("");
               } finally {
                 setLoading(false);
               }
@@ -171,6 +187,7 @@ export default function App() {
       } else { 
         setUser(null); 
         setRole("guest"); 
+        setUserZone("");
         setLoading(false); 
       }
     });
@@ -181,14 +198,14 @@ export default function App() {
   // ── Redirection racine simplifiée ───────────────────────────────────────
   const rootRedirect = () => {
     if (role === "loading") return <div className="min-h-screen bg-slate-900" />;
-    if (!user)                          return <Navigate to="/acces" replace />;
-    if (role === "admin")               return <Navigate to="/admin-home" replace />;
-    if (role === "livreur")             return <Navigate to="/livreur-home" replace />;
-    if (role === "vendeur")             return <Navigate to="/vendeur-dashboard" replace />;
-    if (role === "coursier")            return <Navigate to="/espace-coursier" replace />;
+    if (!user)                                 return <Navigate to="/acces" replace />;
+    if (role === "admin")                       return <Navigate to="/admin-home" replace />;
+    if (role === "livreur")                     return <Navigate to="/livreur-home" replace />;
+    if (role === "vendeur")                     return <Navigate to="/vendeur-dashboard" replace />;
+    if (role === "coursier")                    return <Navigate to="/espace-coursier" replace />;
     
     if (EXTERNAL_ROLES.includes(role)) {
-      const zone = user?.sectorZone || "default";
+      const zone = userZone || "default";
       return <Navigate to={`/livreur-secteur/${zone}`} replace />;
     }
 
@@ -231,8 +248,8 @@ export default function App() {
             <Route path="/acces"                   element={<PageAcces />} />
             <Route path="/login-client"           element={<LoginClient />} />
             <Route path="/login-marketplace"      element={<LoginMarketplace />} />
-            <Route path="/login-livreur/:zone"    element={<LoginLivreur />} />
-            <Route path="/login-livreur"          element={<LoginLivreur />} />
+            <Route path="/login-livreur/:zone"    element={<LoginLivreurSecteurs />} />
+            <Route path="/login-livreur"          element={<LoginLivreurSecteurs />} />
             <Route path="/login-coursier"         element={<LoginCoursier />} />
             <Route path="/admin-login"            element={<AdminLogin />} />
             <Route path="/vendeur-login"          element={<VendeurLogin />} />
@@ -244,7 +261,7 @@ export default function App() {
 
             {/* Client & Services */}
             <Route path="/client-home" element={
-              <ProtectedRoute allow={["client","admin","vendeur","guest"]} userRole={role}>
+              <ProtectedRoute allow={["client","admin","vendeur","guest"]} userRole={role} userZone={userZone}>
                 <ClientHome />
               </ProtectedRoute>
             }/>
@@ -254,17 +271,17 @@ export default function App() {
             <Route path="/product/:id" element={<ProductDetails />} />
             <Route path="/cart"        element={<CartPage />} />
 
-            <Route path="/store"                     element={<StorePage />} />
-            <Route path="/store/:vendorId"           element={<StorePage />} />
+            <Route path="/store"                                     element={<StorePage />} />
+            <Route path="/store/:vendorId"                           element={<StorePage />} />
             <Route path="/store/:vendorId/:productId" element={<StorePage />} />
 
-            <Route path="/supermarket" element={<ProtectedRoute allow={["client","admin"]} userRole={role}><SupermarketPage /></ProtectedRoute>} />
-            <Route path="/resto"       element={<ProtectedRoute allow={["client","admin"]} userRole={role}><RestoPage /></ProtectedRoute>} />
-            <Route path="/vtc"         element={<ProtectedRoute allow={["client","admin"]} userRole={role}><VehiculePage /></ProtectedRoute>} />
-            <Route path="/immobilier"  element={<ProtectedRoute allow={["client","admin"]} userRole={role}><ImmobilierPage /></ProtectedRoute>} />
-            <Route path="/vehicule"  element={<ProtectedRoute allow={["client","admin"]} userRole={role}><VehiculePage /></ProtectedRoute>} />
-            <Route path="/mes-courses" element={<ProtectedRoute allow={["client","admin"]} userRole={role}><MesCourses /></ProtectedRoute>} />
-            <Route path="/profil-client" element={<ProtectedRoute allow={["client","admin"]} userRole={role}><ProfilClient /></ProtectedRoute>} />
+            <Route path="/supermarket" element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><SupermarketPage /></ProtectedRoute>} />
+            <Route path="/resto"       element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><RestoPage /></ProtectedRoute>} />
+            <Route path="/vtc"         element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><VehiculePage /></ProtectedRoute>} />
+            <Route path="/immobilier"  element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><ImmobilierPage /></ProtectedRoute>} />
+            <Route path="/vehicule"  element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><VehiculePage /></ProtectedRoute>} />
+            <Route path="/mes-courses" element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><MesCourses /></ProtectedRoute>} />
+            <Route path="/profil-client" element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><ProfilClient /></ProtectedRoute>} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
 
             {/* Confirmations & Suivi */} 
@@ -276,26 +293,27 @@ export default function App() {
             <Route path="/cart-course/:orderId" element={<CartCourseWeb />} />
 
             {/* Livreurs / Coursiers */}
-            <Route path="/espace-coursier"       element={<ProtectedRoute allow={["coursier","admin"]} userRole={role}><EspaceCoursier /></ProtectedRoute>} />
-            <Route path="/profil-livreur"        element={<ProtectedRoute allow={["livreur", "livreur-externe", "coursier","admin"]} userRole={role}><ProfilLivreur /></ProtectedRoute>} />
-            <Route path="/upload-recu"           element={<ProtectedRoute allow={["livreur", "livreur-externe", "coursier", "vendeur","admin"]} userRole={role}><UploadRecu /></ProtectedRoute>} />
-            <Route path="/livreur-home"          element={<ProtectedRoute allow={["livreur","admin"]} userRole={role}><LivreurExterne /></ProtectedRoute>} />
-            <Route path="/livreur-secteur/:zone" element={<ProtectedRoute allow={["livreur-externe","admin"]} userRole={role}><LivreurExterne /></ProtectedRoute>} />
+            <Route path="/espace-coursier"       element={<ProtectedRoute allow={["coursier","admin"]} userRole={role} userZone={userZone}><EspaceCoursier /></ProtectedRoute>} />
+            <Route path="/profil-livreur"        element={<ProtectedRoute allow={["livreur", "livreur-externe", "coursier","admin"]} userRole={role} userZone={userZone}><ProfilLivreur /></ProtectedRoute>} />
+            <Route path="/upload-recu"           element={<ProtectedRoute allow={["livreur", "livreur-externe", "coursier", "vendeur","admin"]} userRole={role} userZone={userZone}><UploadRecu /></ProtectedRoute>} />
+            <Route path="/livreur-home"          element={<ProtectedRoute allow={["livreur","admin"]} userRole={role} userZone={userZone}><LivreurExterne /></ProtectedRoute>} />
+            <Route path="/livreur-secteur/:zone" element={<ProtectedRoute allow={["livreur-externe","admin"]} userRole={role} userZone={userZone}><LivreurExterne /></ProtectedRoute>} />
+            
             {/* Vendeur */}
-            <Route path="/vendeur-dashboard" element={<ProtectedRoute allow={["vendeur","admin"]} userRole={role}><VendeurDashboard /></ProtectedRoute>} />
-            <Route path="/historique-gains"      element={<ProtectedRoute allow={["livreur","livreur-externe","coursier","admin"]} userRole={role}><HistoriqueGains /></ProtectedRoute>} />
+            <Route path="/vendeur-dashboard" element={<ProtectedRoute allow={["vendeur","admin"]} userRole={role} userZone={userZone}><VendeurDashboard /></ProtectedRoute>} />
+            <Route path="/historique-gains"      element={<ProtectedRoute allow={["livreur","livreur-externe","coursier","admin"]} userRole={role} userZone={userZone}><HistoriqueGains /></ProtectedRoute>} />
 
             {/* Admin */}
-            <Route path="/assignation-automatique/:orderId" element={<ProtectedRoute allow={["admin"]} userRole={role}><AssignationAutomatique /></ProtectedRoute>} />
-            <Route path="/assignation-coursier/:orderId"    element={<ProtectedRoute allow={["admin"]} userRole={role}><AssignationCoursier /></ProtectedRoute>} />
-            <Route path="/admin-home"          element={<ProtectedRoute allow={["admin"]} userRole={role}><AdminHome /></ProtectedRoute>} />
-            <Route path="/admin/print-qr"      element={<ProtectedRoute allow={["admin"]} userRole={role}><PrintableQrPage /></ProtectedRoute>} />
-            <Route path="/gestion-livreurs"    element={<ProtectedRoute allow={["admin"]} userRole={role}><GestionLivreurs /></ProtectedRoute>} />
-            <Route path="/gestion-clients"     element={<ProtectedRoute allow={["admin"]} userRole={role}><GestionClients /></ProtectedRoute>} />
-            <Route path="/gestion-jetons"      element={<ProtectedRoute allow={["admin"]} userRole={role}><GestionJetons /></ProtectedRoute>} />
-            <Route path="/gestion-connexions"  element={<ProtectedRoute allow={["admin"]} userRole={role}><GestionConnexions /></ProtectedRoute>} />
-            <Route path="/admin-frauds"        element={<ProtectedRoute allow={["admin"]} userRole={role}><AdminFraudDashboard /></ProtectedRoute>} />
-            <Route path="/admin-proofs"        element={<ProtectedRoute allow={["admin"]} userRole={role}><AdminProofs /></ProtectedRoute>} />
+            <Route path="/assignation-automatique/:orderId" element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><AssignationAutomatique /></ProtectedRoute>} />
+            <Route path="/assignation-coursier/:orderId"    element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><AssignationCoursier /></ProtectedRoute>} />
+            <Route path="/admin-home"          element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><AdminHome /></ProtectedRoute>} />
+            <Route path="/admin/print-qr"      element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><PrintableQrPage /></ProtectedRoute>} />
+            <Route path="/gestion-livreurs"    element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><GestionLivreurs /></ProtectedRoute>} />
+            <Route path="/gestion-clients"     element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><GestionClients /></ProtectedRoute>} />
+            <Route path="/gestion-jetons"      element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><GestionJetons /></ProtectedRoute>} />
+            <Route path="/gestion-connexions"  element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><GestionConnexions /></ProtectedRoute>} />
+            <Route path="/admin-frauds"        element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><AdminFraudDashboard /></ProtectedRoute>} />
+            <Route path="/admin-proofs"        element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><AdminProofs /></ProtectedRoute>} />
 
             {/* Outils */}
             <Route path="/gps-diagnostic"    element={<GpsDiagnostic />} />

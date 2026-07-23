@@ -39,17 +39,6 @@
   transition: transform 0.3s ease-out;
 }
 
-@keyframes radar-rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* On garde tes styles existants pour le reste */
-.leaflet-container {
-  width: 100%;
-  height: 100%;
-}
-
 /* --- Radar de recherche & HUD --- */
 .super-hud-radar {
   position: absolute;
@@ -99,19 +88,10 @@
   transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* --- Animations --- */
-@keyframes radar-pulse {
-  0% { transform: scale(0.5); opacity: 1; }
-  100% { transform: scale(1.5); opacity: 0; }
-}
-
-@keyframes radar-rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 /* --- Leaflet Overrides (UI Clean) --- */
 .leaflet-container {
+  width: 100%;
+  height: 100%;
   background: #f8fafc !important;
 }
 
@@ -146,11 +126,6 @@ button:active {
   animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
 /* Effet de brillance sur le bouton principal (Confiance) */
 .btn-trust-shine {
   position: relative;
@@ -169,15 +144,31 @@ button:active {
   animation: shine 3s infinite;
 }
 
+/* --- Modal Pass Free --- */
+.modal-enter {
+  animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* --- Animations Keyframes --- */
+@keyframes radar-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes radar-pulse {
+  0% { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 @keyframes shine {
   0% { left: -100%; }
   20% { left: 100%; }
   100% { left: 100%; }
-}
-
-/* --- Modal Pass Free --- */
-.modal-enter {
-  animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes slide-up {

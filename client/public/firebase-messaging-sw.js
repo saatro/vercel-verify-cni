@@ -29,7 +29,7 @@ messaging.onBackgroundMessage((payload) => {
 });
 
 // 2. LOGIQUE PWA / CACHING
-const CACHE_NAME = "mambo-v9"; // Incrémenté en v9 pour purger le cache et enregistrer le correctif de routage
+const CACHE_NAME = "mambo-v10"; // Version incrémentée pour purger l'ancien cache local
 const urlsToCache = [
   "/",
   "/index.html",
@@ -59,9 +59,14 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// 3. STRATÉGIE FETCH PROFESSIONNELLE AVEC FILTRAGE DES CARTES EXTERNES
+// 3. STRATÉGIE FETCH OPTIMISÉE POUR FIRESTORE ET ENVIRONNEMENT DEV
 self.addEventListener("fetch", (event) => {
   const url = event.request.url;
+
+  // PROTECTION DEV : Ne pas intercepter le réseau en environnement local (localhost / 127.0.0.1)
+  if (url.includes("localhost") || url.includes("127.0.0.1")) {
+    return;
+  }
 
   // PROTECTION CRITIQUE 1 : Ignorer les requêtes non-http ou non-GET
   if (!url.startsWith('http') || event.request.method !== 'GET') return;
@@ -86,7 +91,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // EXCLUSION SÉCURISÉE DES ASSETS LOCAUX ET WEBPACK POUR L'ENVIRONNEMENT DEV
+  // EXCLUSION SÉCURISÉE DES ASSETS LOCAUX ET WEBPACK
   if (
     url.includes("/static/") || 
     url.includes("/media/") || 
@@ -95,14 +100,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // RE-ROUTAGE STRATÉGIQUE DES NAVIGATIONS CLIENTS (ex: /acces, /marketplace-full)
-  // Évite d'interroger le serveur pour des routes virtuelles d'une SPA React
+  // RE-ROUTAGE STRATÉGIQUE DES NAVIGATIONS CLIENTS (SPA React)
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.match('/index.html').then((response) => {
-        return response || fetch(event.request);
-      }).catch(() => {
-        return fetch(event.request);
+      fetch(event.request).catch(() => {
+        // En cas d'absence totale de réseau, servir le fallback index.html depuis le cache
+        return caches.match('/index.html');
       })
     );
     return;
@@ -131,14 +134,6 @@ self.addEventListener("fetch", (event) => {
             });
           }
           return networkResponse;
-        })
-        .catch((error) => {
-          console.error("[SW] Erreur de capture réseau sur :", url, error);
-          
-          return new Response("", {
-            status: 408,
-            statusText: "Network Request Failed"
-          });
         });
     })
   );

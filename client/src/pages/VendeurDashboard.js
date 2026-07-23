@@ -1,10 +1,13 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
+import { functions } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
 import {
   doc, getDoc, collection, query, where,
   onSnapshot, addDoc, updateDoc, deleteDoc,
-  serverTimestamp, writeBatch
+  serverTimestamp, writeBatch, getDocs
 } from 'firebase/firestore';
 import { uploadToCloudinary } from '../utils/cloudinary';
 import { signOut } from 'firebase/auth';
@@ -35,6 +38,15 @@ const CATEGORIES_MAP = {
   immobilier:      ['Studio','Chambre Salon','2 Pièces','3 Pièces','4 Pièces','Villa','Duplex','Terrain','Bureau'],
   vehicule:        ['Berline','SUV / 4x4','Moto','Camion','Pick-up','Utilitaire'],
   autre:           ['Artisanat','Cosmétiques','Agriculture','Services','Autre'],
+};
+// eslint-disable-next-line no-unused-vars
+const STATUS_META = {
+  en_preparation:       { label: "En préparation", color: "#b45309", bg: "#fef3c7", border: "#fde68a" },
+  en_attente_paiement:  { label: "Attente Reçu Wave", color: "#d97706", bg: "#fffbeb", border: "#fcd34d" },
+  paye_ia_valide:       { label: "Payé & Validé", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
+  achats_termines:      { label: "Prêt pour Livreur", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
+  en_route:             { label: "En cours de route", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe" },
+  en_attente_coursier:  { label: "Recherche Livreur", color: "#475569", bg: "#f8fafc", border: "#e2e8f0" }
 };
 
 // ── Composant Champ Formulaire ────────────────────────────────────────────────
@@ -69,7 +81,7 @@ export default function VendeurDashboard() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [completedOrders, setCompletedOrders] = useState([]);
-  const [stats, setStats] = useState({ totalProduits:0, totalVentes:0, chiffreAffaires:0 });
+  const [stats, setStats] = useState({ totalProduits: 0, totalVentes: 0, chiffreAffaires: 0 });
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
@@ -77,6 +89,8 @@ export default function VendeurDashboard() {
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
   const prevOrderIds = React.useRef(new Set());
+  const [verificationCodes, setVerificationCodes] = useState({}); // { [orderId]: {pickupCode, deliveryCode} | null }
+  const [regeneratingId, setRegeneratingId] = useState(null);
 
   // Écouteur pour capter le préremplissage de boutique ou de coursier fini-rayons via l'URL
   useEffect(() => {
@@ -114,6 +128,81 @@ export default function VendeurDashboard() {
       });
     }
   }, [location.search, userProfile, navigate]);
+  
+  // Listener In-App Messages / Notifications
+  useEffect(() => {
+    if (!userProfile?.id) return;
+
+    const qMessages = query(
+      collection(db, "inAppMessages"),
+      where("receiverId", "==", userProfile.id),
+      where("status", "==", "unread")
+    );
+
+    const unsubMessages = onSnapshot(qMessages, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === "added") {
+          const msgData = change.doc.data();
+          
+          // Notification visuelle à l'écran
+          toast.info(`💬 ${msgData.title || "Nouveau message"} : ${msgData.body}`, {
+            position: "top-center",
+            autoClose: 5000,
+          });
+
+          // Marquer automatiquement le message comme lu
+          updateDoc(doc(db, "inAppMessages", change.doc.id), {
+            status: "read",
+            readAt: serverTimestamp()
+          }).catch(err => console.error("Erreur mise à jour message lu :", err));
+        }
+      });
+    }, (err) => {
+      console.warn("Erreur d'écoute des messages In-App :", err.message);
+    });
+
+    return () => unsubMessages();
+  }, [userProfile?.id]);
+
+  // Listener Firebase Cloud Messaging (Notifications Hors-App / Push)
+  useEffect(() => {
+    if (!userProfile?.id) return;
+
+    const requestPushPermission = async () => {
+      try {
+        // Importation dynamique du module messaging de Firebase
+        const { getMessaging, getToken } = await import('firebase/messaging');
+        const messaging = getMessaging();
+        
+        // Demande d'autorisation au navigateur
+        const permission = await Notification.requestPermission();
+        
+        if (permission === 'granted') {
+          // Récupération du jeton unique de l'appareil
+          // Remplace 'VOTRE_CLE_VAPID_PUBLIQUE' par ta clé Web Push générée dans la console Firebase
+          const currentToken = await getToken(messaging, { 
+            vapidKey: 'BDE5b26fkUCHbCy7IzjX30eDjJpfQev7GWOrKc6yJxUV48L0XInKEd2urQwzuqUgjQ5UAfP9EcvZ3gtXYI52oII' 
+          });
+          
+          if (currentToken) {
+            // Sauvegarde ou mise à jour du jeton dans le profil du vendeur pour le serveur
+            await updateDoc(doc(db, "users", userProfile.id), {
+              fcmToken: currentToken,
+              updatedAt: serverTimestamp()
+            });
+          } else {
+            console.warn('Aucun jeton d\'enregistrement disponible. Demandez l\'autorisation de générer un jeton.');
+          }
+        } else {
+          console.warn('Permission de notification refusée par l\'utilisateur.');
+        }
+      } catch (err) {
+        console.error('Erreur lors de la configuration des notifications Push FCM :', err);
+      }
+    };
+
+    requestPushPermission();
+  }, [userProfile?.id]);
 
   useEffect(() => {
     let unsubP = () => {};
@@ -202,6 +291,81 @@ export default function VendeurDashboard() {
     orders.filter(o => ['paye','paye_ia_valide','en_attente_livreur','preparation','attente'].includes((o.status||'').toLowerCase())).length,
   [orders]);
 
+  const fetchVerificationCode = React.useCallback(async (orderId) => {
+    try {
+      const q = query(collection(db, "courses"), where("orderId", "==", orderId));
+      const querySnap = await getDocs(q);
+      
+      if (!querySnap.empty) {
+        const courseData = querySnap.docs[0].data();
+        const detectedCode = courseData.passCode || courseData.verificationCode || courseData.pickupCode || "";
+        const deliveryCode = courseData.deliveryCode || "";
+        
+        if (detectedCode) {
+          setVerificationCodes(prev => ({
+            ...prev,
+            [orderId]: { pickupCode: detectedCode, deliveryCode: deliveryCode }
+          }));
+          return;
+        }
+      }
+      
+      const directSnap = await getDoc(doc(db, "courses", orderId));
+      if (directSnap.exists()) {
+        const data = directSnap.data();
+        const code = data.passCode || data.verificationCode || data.pickupCode || "";
+        const deliveryCode = data.deliveryCode || "";
+        if (code) {
+          setVerificationCodes(prev => ({
+            ...prev,
+            [orderId]: { pickupCode: code, deliveryCode: deliveryCode }
+          }));
+          return;
+        }
+      }
+
+      setVerificationCodes(prev => ({ ...prev, [orderId]: null }));
+    } catch (e) {
+      console.warn("Erreur lecture code de passation:", e.message);
+      setVerificationCodes(prev => ({ ...prev, [orderId]: null }));
+    }
+  }, []);
+
+  useEffect(() => {
+    const toCheck = orders.filter(o => o.courseRequested);
+    toCheck.forEach(o => {
+      if (!(o.id in verificationCodes)) fetchVerificationCode(o.id);
+    });
+  }, [orders, verificationCodes, fetchVerificationCode]);
+
+  const handleRegenerateCode = async (orderId) => {
+    setRegeneratingId(orderId);
+    try {
+      const linkQ = query(collection(db, "courses"), where("orderId", "==", orderId));
+      const linkSnap = await getDocs(linkQ);
+
+      if (linkSnap.empty) {
+        toast.error("Aucune course trouvée pour cette commande. Relancez d'abord la commande de course.");
+        setRegeneratingId(null);
+        return;
+      }
+
+      const realCourseId = linkSnap.docs[0].id;
+      const initCodes = httpsCallable(functions, "initializeVerificationCodes");
+      const result = await initCodes({ courseId: realCourseId });
+
+      setVerificationCodes(prev => ({
+        ...prev,
+        [orderId]: { pickupCode: result.data.pickupCode, deliveryCode: result.data.deliveryCode }
+      }));
+      toast.success("Code de passation généré !");
+    } catch (e) {
+      toast.error(e.message || "Impossible de générer le code.");
+    } finally {
+      setRegeneratingId(null);
+    }
+  };
+
   useEffect(() => {
     const newOrders = orders.filter(o =>
       ['paye_ia_valide', 'en_attente_livreur'].includes((o.status || '').toLowerCase()) &&
@@ -219,14 +383,16 @@ export default function VendeurDashboard() {
 
   const handleOrderLaunchToTiers = async (order) => {
     if (!userProfile) return toast.error("Données du vendeur non chargées.");
+    try {
+      await updateDoc(doc(db, 'orders', order.id), { courseRequested: true });
+    } catch (e) {
+      console.warn("Impossible de marquer courseRequested:", e.message);
+    }
 
     let clientName = order.nom || order.clientName || order.nomClient || '';
     let clientPhone = order.telephone || order.clientPhone || order.telephoneClient || '';
     let deliveryAddress = order.adresse || order.deliveryAddress || order.adresseLivraison || '';
 
-    // Repli : le document `orders` ne stocke pas toujours le nom, le
-    // téléphone ni l'adresse de livraison du client. On va les chercher
-    // sur son profil (`users/{clientId}`) si nécessaire.
     if (!clientName || !clientPhone || !deliveryAddress) {
       const clientUid = order.clientId || order.userId;
       if (clientUid) {
@@ -320,6 +486,9 @@ export default function VendeurDashboard() {
                 completedOrders={completedOrders} 
                 onOrderClick={setSelectedOrderId}
                 onLaunchTiers={handleOrderLaunchToTiers}
+                verificationCodes={verificationCodes}
+                regeneratingId={regeneratingId}
+                onRegenerateCode={handleRegenerateCode}
               />
             )}
 
@@ -441,7 +610,7 @@ function ProductModal({ user, product, onClose }) {
           </FormField>
         </div>
         {product && (
-          <button className="m-btn-delete-prod" onClick={() => { deleteDoc(doc(db, 'products', product.id)); onClose(); }}>
+          <button className="m-btn-delete-prod" onClick={async () => { await deleteDoc(doc(db, 'products', product.id)); onClose(); }}>
             <Trash2 size={16}/> Supprimer
           </button>
         )}
@@ -451,7 +620,7 @@ function ProductModal({ user, product, onClose }) {
 }
 
 // ── Vue des Commandes ──────────────────────────────────────────────────────────
-function OrdersView({ orders, completedOrders, onOrderClick, onLaunchTiers }) {
+function OrdersView({ orders, completedOrders, onOrderClick, onLaunchTiers, verificationCodes, regeneratingId, onRegenerateCode }) {
   const [filter, setFilter] = useState('actives');
   const list = filter === 'actives' ? orders : completedOrders;
 
@@ -496,27 +665,76 @@ function OrdersView({ orders, completedOrders, onOrderClick, onLaunchTiers }) {
 
               {filter === 'actives' && (
                 <div style={{ padding: '0 16px 14px 16px', marginTop: -4 }}>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onLaunchTiers(o); }}
-                    style={{
-                      width: '100%',
+                  {!o.courseRequested && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onLaunchTiers(o); }}
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        background: '#6d28d9',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '10px',
+                        fontWeight: '700',
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <PlusCircle size={14} />
+                      Commander une course pour cette commande
+                    </button>
+                  )}
+
+                  {o.courseRequested && (
+                    <div style={{
                       padding: '10px 14px',
-                      background: '#6d28d9',
-                      color: '#fff',
-                      border: 'none',
+                      background: '#f8fafc',
+                      border: '1px dashed #e2e8f0',
                       borderRadius: '10px',
-                      fontWeight: '700',
-                      fontSize: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <PlusCircle size={14} />
-                    COMMANDER UNE COURSE POUR UN TIERS
-                  </button>
+                    }}>
+                      {verificationCodes[o.id] === undefined ? (
+                        <span style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8' }}>
+                          Vérification du code...
+                        </span>
+                      ) : verificationCodes[o.id] ? (
+                        <div style={{ textAlign: 'center' }}>
+                          <span style={{ display: 'block', fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>
+                            Code à donner au livreur
+                          </span>
+                          <span style={{ fontSize: 22, fontWeight: 900, letterSpacing: 3, color: '#0f172a' }}>
+                            {verificationCodes[o.id].pickupCode}
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: 'center' }}>
+                          <span style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#dc2626', marginBottom: 6 }}>
+                            ⚠️ Code de passation non généré
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onRegenerateCode(o.id); }}
+                            disabled={regeneratingId === o.id}
+                            style={{
+                              padding: '8px 14px',
+                              fontSize: 10,
+                              fontWeight: 800,
+                              color: '#fff',
+                              background: '#dc2626',
+                              border: 'none',
+                              borderRadius: 10,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {regeneratingId === o.id ? "Génération..." : "Régénérer le code"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -1,17 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase';
-import { 
-  Loader2, CheckCircle, Phone, Store, 
-  ChevronDown, MessageCircle,
-  Bike, Star, ShieldCheck
+import {
+  Bike,
+  CheckCircle,
+  ChevronDown,
+  Loader2,
+  MessageCircle,
+  Phone,
+  ShieldCheck,
+  Star,
+  Store
 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { db } from '../firebase';
 
 const CartCourseWeb = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
-  
+
   const [orderData, setOrderData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showItems, setShowItems] = useState(false);
@@ -24,14 +30,14 @@ const CartCourseWeb = () => {
     if (!orderId) return;
 
     const docRef = doc(db, "orders", orderId);
-    
+
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const newData = docSnap.data();
-        
+
         // Notification flash quand Johanne finit les achats
-        if (orderData?.status && orderData.status !== "achats_termines" && 
-            newData?.status === "achats_termines") {
+        if (orderData?.status && orderData.status !== "achats_termines" &&
+          newData?.status === "achats_termines") {
           setShowSuccessOverlay(true);
           setTimeout(() => setShowSuccessOverlay(false), 4000);
         }
@@ -53,18 +59,26 @@ const CartCourseWeb = () => {
   const calculateTotal = useCallback(() => {
     if (orderData?.amount) return orderData.amount;
     if (!orderData?.items) return 0;
-    return orderData.items.reduce((sum, item) => 
+    return orderData.items.reduce((sum, item) =>
       sum + (Number(item.priceUnit || item.prix || 0) * (item.quantity || 1)), 0);
   }, [orderData]);
 
   const totalPrice = calculateTotal();
 
   const handleRate = async (value) => {
-    setRating(value);
     if (orderId) {
+      setRating(value);
       const docRef = doc(db, "orders", orderId);
       await updateDoc(docRef, { clientRating: value });
     }
+  };
+
+  // Génération du lien d'assistance avec message personnalisé contenant l'ID de la commande
+  const handleAssistanceClick = () => {
+    const text = encodeURIComponent(
+      `Bonjour l'équipe Mambo, je viens d'effectuer mon paiement de ${totalPrice.toLocaleString()} F pour la commande ${orderData?.orderId || orderId || ''}. Pouvez-vous vérifier mon reçu ?`
+    );
+    window.open(`https://wa.me/2250778073456?text=${text}`, '_blank');
   };
 
   // --- ÉTATS DYNAMIQUES ---
@@ -90,28 +104,28 @@ const CartCourseWeb = () => {
             <ShieldCheck size={48} />
           </div>
           <h1 className="text-3xl font-black tracking-tighter uppercase text-slate-900">Livré !</h1>
-          
+
           <div className="p-6 my-8 bg-white border shadow-xl rounded-3xl border-slate-200">
             <div className="w-20 h-20 mx-auto mb-4 overflow-hidden border-2 rounded-full border-emerald-500 bg-slate-100">
-                {orderData?.coursierPhoto ? (
-                    <img src={orderData.coursierPhoto} className="object-cover w-full h-full" alt="" />
-                ) : <Bike className="w-full h-full p-4 text-slate-300" />}
+              {orderData?.coursierPhoto ? (
+                <img src={orderData.coursierPhoto} className="object-cover w-full h-full" alt="" />
+              ) : <Bike className="w-full h-full p-4 text-slate-300" />}
             </div>
             <h3 className="font-bold uppercase text-slate-800">{orderData?.coursierNom || "Agent Mambo"}</h3>
-            
+
             <p className="text-[10px] font-bold text-slate-400 uppercase mt-4 mb-2">Notez votre agent</p>
             <div className="flex justify-center gap-2">
               {[1, 2, 3, 4, 5].map((star) => (
-                <button 
-                  key={star} 
+                <button
+                  key={star}
                   onMouseEnter={() => setRatingHover(star)}
                   onMouseLeave={() => setRatingHover(0)}
                   onClick={() => handleRate(star)}
                   className="transition-transform active:scale-90"
                 >
-                  <Star 
-                    size={32} 
-                    className={`${(ratingHover || rating) >= star ? 'text-yellow-400 fill-yellow-400' : 'text-slate-200'} transition-colors`} 
+                  <Star
+                    size={32}
+                    className={`${(ratingHover || rating) >= star ? 'text-yellow-400 fill-yellow-400' : 'text-slate-200'} transition-colors`}
                   />
                 </button>
               ))}
@@ -129,7 +143,7 @@ const CartCourseWeb = () => {
   // --- RENDU : SUIVI ---
   return (
     <div className="relative flex flex-col items-center min-h-screen p-4 bg-white text-slate-800">
-      
+
       {showSuccessOverlay && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-500/95 backdrop-blur-sm animate-in fade-in">
           <CheckCircle size={80} className="text-white animate-bounce" />
@@ -140,15 +154,15 @@ const CartCourseWeb = () => {
 
       <div className="w-full max-w-md">
         <div className="mt-10 mb-10 text-center">
-            <div className="inline-flex p-3 mb-4 bg-white border shadow-sm rounded-2xl border-slate-100">
-                <Store className="text-blue-600" size={32} />
-            </div>
-            <h2 className="text-4xl font-black tracking-tighter text-slate-900">
-              {totalPrice.toLocaleString()} F
-            </h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 italic">
-                Paiement {orderData?.type || 'COURSE'} CERTIFIÉ
-            </p>
+          <div className="inline-flex p-3 mb-4 bg-white border shadow-sm rounded-2xl border-slate-100">
+            <Store className="text-blue-600" size={32} />
+          </div>
+          <h2 className="text-4xl font-black tracking-tighter text-slate-900">
+            {totalPrice.toLocaleString()} F
+          </h2>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 italic">
+            Paiement {orderData?.type || 'COURSE'} CERTIFIÉ
+          </p>
         </div>
 
         {!hasCourier ? (
@@ -169,9 +183,9 @@ const CartCourseWeb = () => {
             <div className="p-6">
               <div className="flex items-center gap-4 p-4 mb-6 border bg-slate-50 rounded-2xl border-slate-100">
                 <div className="w-16 h-16 overflow-hidden bg-white border-2 rounded-full shadow-sm border-emerald-500">
-                    {orderData?.coursierPhoto ? (
-                        <img src={orderData.coursierPhoto} className="object-cover w-full h-full" alt="" />
-                    ) : <Bike className="w-full h-full p-4 text-slate-200" />}
+                  {orderData?.coursierPhoto ? (
+                    <img src={orderData.coursierPhoto} className="object-cover w-full h-full" alt="" />
+                  ) : <Bike className="w-full h-full p-4 text-slate-200" />}
                 </div>
                 <div>
                   <h3 className="font-bold uppercase text-slate-800">{orderData?.coursierNom || "Chargement..."}</h3>
@@ -181,14 +195,14 @@ const CartCourseWeb = () => {
 
               <div className="mb-6">
                 <div className="w-full h-2 mb-3 overflow-hidden rounded-full bg-slate-100">
-                  <div 
+                  <div
                     className={`h-full bg-emerald-500 transition-all duration-1000 ease-out ${isShoppingFinished ? 'w-full shadow-[0_0_8px_#10b981]' : 'w-1/2 animate-pulse'}`}
                   ></div>
                 </div>
                 <p className="text-xs font-bold tracking-tighter text-center uppercase text-slate-500">
-                  {orderData?.status === "en_route" ? "🚀 Le livreur est en route vers vous" : 
-                   orderData?.status === "achats_termines" ? "📦 Colis prêt (transmission livreur)" :
-                   "🛒 Achats en cours par votre agent..."}
+                  {orderData?.status === "en_route" ? "🚀 Le livreur est en route vers vous" :
+                    orderData?.status === "achats_termines" ? "📦 Colis prêt (transmission livreur)" :
+                      "🛒 Achats en cours par votre agent..."}
                 </p>
               </div>
 
@@ -196,22 +210,22 @@ const CartCourseWeb = () => {
                 <a href={`tel:${orderData?.coursierPhone || '225'}`} className="flex items-center justify-center gap-2 py-4 border border-slate-200 rounded-2xl font-black text-[10px] hover:bg-slate-50 transition-colors">
                   <Phone size={16} className="text-blue-600" /> APPELER
                 </a>
-                <button 
-                  onClick={() => window.open(`https://wa.me/2250778073456`, '_blank')} 
+                <button
+                  onClick={handleAssistanceClick}
                   className="flex items-center justify-center gap-2 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] shadow-lg shadow-blue-200"
                 >
                   <MessageCircle size={16} /> ASSISTANCE
                 </button>
               </div>
 
-              <button 
-                onClick={() => setShowItems(!showItems)} 
+              <button
+                onClick={() => setShowItems(!showItems)}
                 className="flex items-center justify-between w-full p-4 mt-6 transition-colors bg-slate-50 rounded-xl hover:bg-slate-100"
               >
                 <span className="text-[10px] font-black uppercase text-slate-400">Détails de la liste</span>
                 <ChevronDown size={14} className={`text-slate-400 transition-transform ${showItems ? 'rotate-180' : ''}`} />
               </button>
-              
+
               {showItems && orderData?.items && (
                 <div className="px-2 mt-4 space-y-2 duration-300 animate-in slide-in-from-top-2">
                   {orderData.items.map((item, i) => (

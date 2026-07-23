@@ -1,290 +1,463 @@
-import express from "express";
-import http from "http";
-import { Server } from "socket.io";
-import cors from "cors";
+import dotenv from "dotenv";
+import path from "path";
+
+// Charger les variables .env immédiatement
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+
+import makeWASocket, {
+  DisconnectReason,
+  downloadMediaMessage,
+  fetchLatestWaWebVersion,
+  useMultiFileAuthState
+} from "@whiskeysockets/baileys";
 import admin from "firebase-admin";
-import fs from "fs";
-import crypto from "crypto";
+import pino from "pino";
+import QRCode from "qrcode-terminal";
 
-const app = express();
-app.use(cors());
-app.use(express.json());
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+// ═══════════════════════════════════════════════════════════════════
+// INITIALISATION FIREBASE ADMIN & CONSTANTES
+// ═══════════════════════════════════════════════════════════════════
+const projectId = process.env.FIREBASE_PROJECT_ID;
+const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+const rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-// Firebase init adaptatif (Local & Render)
-let serviceAccount;
+// Marchand dédié exclusivement aux recharges livreurs
+const LEGACY_MERCHANT_NAME = process.env.LEGACY_MERCHANT_NAME || "LEGACY";
 
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    // Sur Render : lecture depuis la variable d'environnement sécurisée
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-} else {
-    // En local : lecture du fichier physique local
-    serviceAccount = JSON.parse(fs.readFileSync("./serviceAccountKey.json", "utf8"));
+if (!projectId || !clientEmail || !rawPrivateKey) {
+  console.error("❌ ERREUR CRITIQUE : Des variables Firebase sont manquantes dans process.env !");
+  process.exit(1);
 }
 
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+function cleanPrivateKey(key) {
+  if (!key) return "";
+  let formattedKey = key;
+
+  if ((formattedKey.startsWith('"') && formattedKey.endsWith('"')) ||
+      (formattedKey.startsWith("'") && formattedKey.endsWith("'"))) {
+    formattedKey = formattedKey.slice(1, -1);
+  }
+
+  formattedKey = formattedKey.replace(/\\n/g, "\n");
+  formattedKey = formattedKey.replace(/\r\n/g, "\n");
+
+  if (!formattedKey.includes("-----BEGIN PRIVATE KEY-----")) {
+    formattedKey = `-----BEGIN PRIVATE KEY-----\n${formattedKey}`;
+  }
+  if (!formattedKey.includes("-----END PRIVATE KEY-----")) {
+    formattedKey = `${formattedKey}\n-----END PRIVATE KEY-----`;
+  }
+
+  return formattedKey.trim();
+}
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId,
+      clientEmail,
+      privateKey: cleanPrivateKey(rawPrivateKey),
+    }),
+  });
+}
+
 const db = admin.firestore();
 
-// ---------------- UTILS ----------------
-function getDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+// ═══════════════════════════════════════════════════════════════════
+// HELPER : NETTOYAGE ET VARIANTES DU NUMÉRO DE TÉLÉPHONE / JID
+// ═══════════════════════════════════════════════════════════════════
+function sanitizePhoneNumber(rawInput) {
+  if (!rawInput) return "";
+  let digits = String(rawInput).replace(/[^0-9]/g, "");
+
+  if (digits.startsWith("225") && digits.length >= 12) {
+    digits = digits.slice(3);
+  }
+
+  return digits;
 }
 
-/**
- * Générateur de code numérique sécurisé à 6 chiffres
- */
-function generateSecureCode(length = 6) {
-    let code = "";
-    while (code.length < length) {
-        const byte = crypto.randomBytes(1)[0];
-        if (byte < 250) {
-            code += (byte % 10).toString();
-        }
-    }
-    return code;
+function getPhoneVariants(from) {
+  if (!from) return [];
+  const digits = String(from).replace(/[^0-9]/g, "");
+  if (!digits) return [];
+
+  // Si c'est un code de passation à 6 chiffres, on le retourne directement sans transformation téléphone
+  if (digits.length === 6) {
+    return [digits];
+  }
+
+  let local10 = "";
+  if (digits.startsWith("225") && digits.length >= 12) {
+    local10 = digits.slice(3);
+  } else if (digits.length === 10) {
+    local10 = digits;
+  } else if (digits.length === 9) {
+    local10 = "0" + digits;
+  } else {
+    local10 = digits;
+  }
+
+  const baseWithoutZero = local10.startsWith("0") ? local10.slice(1) : local10;
+  const withZero = local10.startsWith("0") ? local10 : "0" + local10;
+
+  return Array.from(
+    new Set([
+      withZero,                   // ex: 0602179075
+      baseWithoutZero,            // ex: 602179075
+      `225${withZero}`,           // ex: 2250602179075
+      `225${baseWithoutZero}`,     // ex: 225602179075
+      `+225${withZero}`,          // ex: +2250602179075
+      `+225${baseWithoutZero}`,    // ex: +225602179075
+      digits                      // valeur brute
+    ])
+  );
 }
-
-// ---------------- AUTOMATION LOGIC ----------------
-async function findAndAssignLivreur(orderId, orderData) {
-    console.log(`🤖 Recherche auto pour la commande : ${orderId}`);
-    
-    // 1. Chercher les livreurs en ligne et DISPONIBLES
-    const snap = await db.collectionGroup("profile")
-        .where("isAvailable", "==", true)
-        .where("lastSeen", ">", new Date(Date.now() - 1000 * 60 * 5)) // Vu il y a moins de 5 min
-        .get();
-
-    let candidates = [];
-    snap.forEach(doc => {
-        const data = doc.data();
-        const uid = doc.ref.parent.parent.id;
-        if (data.currentPos) {
-            const dist = getDistance(orderData.lat, orderData.lng, data.currentPos[0], data.currentPos[1]);
-            candidates.push({ id: uid, ...data, dist });
-        }
-    });
-
-    // 2. Trier par proximité
-    candidates.sort((a, b) => a.dist - b.dist);
-
-    if (candidates.length > 0) {
-        const bestLivreur = candidates[0];
-        console.log(`🎯 Proposé au livreur : ${bestLivreur.id} (${bestLivreur.dist.toFixed(2)} km)`);
-
-        // 3. Update Firestore
-        await db.collection("livraisons").doc(orderId).update({
-            assignedLivreurId: bestLivreur.id,
-            status: "pending"
-        });
-
-        // 4. Envoyer via Socket
-        io.to(bestLivreur.id).emit("newOrder", { ...orderData, id: orderId });
-    } else {
-        console.log("⚠️ Aucun livreur dispo. Nouvelle tentative dans 10s...");
-        setTimeout(() => findAndAssignLivreur(orderId, orderData), 10000);
-    }
-}
-
-// ---------------- SOCKET ----------------
-io.on("connection", (socket) => {
-    socket.on("join", (room) => socket.join(room));
-
-    socket.on("livreurMove", (data) => {
-        io.to("admin_room").emit("livreurPosition", data);
-        io.to(`track_${data.orderId}`).emit("livreurPosition", data);
-    });
-
-    // Quand le livreur accepte, on verrouille
-    socket.on("orderAccepted", async ({ orderId, livreurId }) => {
-        await db.collection("livraisons").doc(orderId).update({ status: "accepted" });
-        io.to(`track_${orderId}`).emit("orderStatus", "accepted");
-    });
-});
-
-// ---------------- API RECEIVE ORDER ----------------
-app.post("/api/orders", async (req, res) => {
-    const orderData = req.body;
-    const orderRef = await db.collection("livraisons").add({
-        ...orderData,
-        status: "searching",
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-    
-    // Lancer l'algorithme d'assignation automatique
-    findAndAssignLivreur(orderRef.id, orderData);
-    
-    res.json({ success: true, orderId: orderRef.id });
-});
 
 // ═══════════════════════════════════════════════════════════════════
-// NOUVEAU : SYSTÈME DE QR CODE / CODES UNIQUES & HANDOFF SÉCURISÉ
+// ANALYSE DE REÇU WAVE AVEC OCR.SPACE API + REGEX
 // ═══════════════════════════════════════════════════════════════════
+async function callOCRSpaceVerification({ apiKey, base64Image, merchantAttendu, montantAttendu }) {
+  if (!apiKey || apiKey.trim() === "") {
+    throw new Error("Clé API OCR.space manquante ou indéfinie dans process.env.OCR_SPACE_API_KEY");
+  }
 
-/**
- * Middleware optionnel de validation du token utilisateur Firebase Auth.
- * Permet de s'assurer que seuls les utilisateurs authentifiés accèdent aux APIs sensibles.
- */
-async function authenticateFirebaseUser(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+  const formData = new FormData();
+  formData.append("apikey", apiKey.trim());
+  formData.append("base64Image", `data:image/jpeg;base64,${base64Image}`);
+  formData.append("language", "fre");
+  formData.append("isOverlayRequired", "false");
+  formData.append("OCREngine", "2");
 
-    if (!token) {
-        return res.status(401).json({ error: "Authentification requise." });
-    }
+  const response = await fetch("https://api.ocr.space/parse/image", {
+    method: "POST",
+    body: formData,
+  });
 
-    try {
-        const decodedToken = await admin.auth().verifyIdToken(token);
-        req.user = decodedToken;
-        next();
-    } catch (error) {
-        return res.status(403).json({ error: "Token d'authentification invalide ou expiré." });
-    }
+  const ocrResult = await response.json();
+
+  if (ocrResult.OCRExitCode !== 1 || !ocrResult.ParsedResults || ocrResult.ParsedResults.length === 0) {
+    throw new Error(`Échec de la reconnaissance OCR.space : ${ocrResult.ErrorMessage || "Erreur inconnue"}`);
+  }
+
+  const rawText = ocrResult.ParsedResults[0].ParsedText || "";
+
+  // ── EXTRACTION REGEX ──
+  // 1. Détection du Reçu complet officiel
+  const isWaveReceipt = /Reçu\s*de\s*Transaction/i.test(rawText) || /Wave/i.test(rawText);
+  const hasApercuAndDetails = /Aperçu/i.test(rawText) && /Détails/i.test(rawText);
+
+  // 2. ID de Transaction (Format Wave : T_ suivi de lettres/chiffres)
+  const txMatch = rawText.match(/T_[A-Z0-9]+/i);
+  const transactionId = txMatch ? txMatch[0].trim() : "";
+
+  // 3. Montant (Recherche d'un nombre suivi de F ou FCFA)
+  const amountMatch = rawText.match(/(\d[\d\s]*)\s*F(?:CFA)?/i);
+  let detectedAmount = 0;
+  if (amountMatch) {
+    detectedAmount = parseInt(amountMatch[1].replace(/\s+/g, ""), 10);
+  }
+
+  // 4. Numéro de téléphone du payeur (Tranches à 10 chiffres : 06, 01, 05, 07, 08, 09)
+  const phoneMatch = rawText.match(/(?:\+?225\s*)?(0[156789](?:\s*\d){8})/i);
+  const buyerPhone = phoneMatch ? sanitizePhoneNumber(phoneMatch[0]) : "";
+
+  // 5. Code de passation (6 chiffres)
+  const passationMatch = rawText.match(/\b\d{6}\b/);
+  const codePassation = passationMatch ? passationMatch[0] : "";
+
+  // 6. Statut et Marchand
+  const isStatusCompleted = /Effectué/i.test(rawText) || /Succès/i.test(rawText) || /Payé/i.test(rawText);
+  
+  const cleanRawText = rawText.toLowerCase().replace(/\s+/g, "");
+  const cleanMerchant = merchantAttendu.toLowerCase().replace(/\s+/g, "");
+  const isMerchantCorrect = cleanRawText.includes(cleanMerchant);
+
+  const isAmountCorrect = montantAttendu ? detectedAmount === Number(montantAttendu) : detectedAmount > 0;
+
+  const isValid = Boolean(
+    transactionId &&
+    detectedAmount > 0 &&
+    isWaveReceipt &&
+    isStatusCompleted
+  );
+
+  return {
+    isValid,
+    transactionId,
+    detectedAmount,
+    buyerName: "",
+    buyerPhone,
+    codePassation,
+    checklist: {
+      isWaveReceipt,
+      hasApercuAndDetails,
+      isMerchantCorrect,
+      isAmountCorrect,
+      isDateRecent: true,
+      isStatusCompleted,
+    },
+  };
 }
 
-/**
- * Initialise les codes de validation uniques (Pickup & Delivery)
- * Cette route est à appeler lors de la création d'une course ou lors de l'attribution d'un livreur.
- */
-app.post("/api/courses/initialize-verification-codes", authenticateFirebaseUser, async (req, res) => {
-    const { courseId } = req.body;
-    if (!courseId) {
-        return res.status(400).json({ error: "courseId requis." });
+// ═══════════════════════════════════════════════════════════════════
+// TRANSACTIONS ATOMIQUES FIRESTORE
+// ═══════════════════════════════════════════════════════════════════
+class DuplicateTransactionError extends Error {
+  constructor() {
+    super("DUPLICATE_TRANSACTION");
+    this.code = "DUPLICATE_TRANSACTION";
+  }
+}
+
+async function creditSoldeLivreurAtomique({ userId, amount, transactionId, userName }) {
+  const payRef = db.collection("paiements_verifies").doc(transactionId);
+  const userRef = db.collection("users").doc(userId);
+
+  await db.runTransaction(async (tx) => {
+    const paySnap = await tx.get(payRef);
+    if (paySnap.exists) throw new DuplicateTransactionError();
+
+    tx.set(payRef, {
+      userId,
+      userName: userName || "Livreur",
+      merchantName: LEGACY_MERCHANT_NAME,
+      montant: amount,
+      transactionId,
+      source: "whatsapp_baileys_render",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    tx.update(userRef, {
+      solde: admin.firestore.FieldValue.increment(amount),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INITIALISATION CLIENT WHATSAPP (BAILEYS)
+// ═══════════════════════════════════════════════════════════════════
+async function connectToWhatsApp() {
+  const { state, saveCreds } = await useMultiFileAuthState(".baileys_auth");
+  const { version } = await fetchLatestWaWebVersion();
+
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    logger: pino({ level: "silent" }),
+    printQRInTerminal: false,
+  });
+
+  sock.ev.on("creds.update", saveCreds);
+
+  sock.ev.on("connection.update", (update) => {
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) {
+      console.log("⚡ Scan ce QR Code avec WhatsApp :");
+      QRCode.generate(qr, { small: true });
     }
 
-    try {
-        const courseRef = db.collection("livraisons").doc(courseId);
-        const courseSnap = await courseRef.get();
+    if (connection === "close") {
+      const shouldReconnect =
+        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      console.log("❌ Connexion fermée. Reconnexion automatique :", shouldReconnect);
+      if (shouldReconnect) {
+        connectToWhatsApp();
+      }
+    } else if (connection === "open") {
+      console.log("✅ Client WhatsApp (Baileys) connecté et prêt !");
+    }
+  });
 
-        if (!courseSnap.exists) {
-            return res.status(404).json({ error: "Livraison introuvable." });
+  // ═══════════════════════════════════════════════════════════════════
+  // ÉCOUTEUR PRINCIPAL DE MESSAGES
+  // ═══════════════════════════════════════════════════════════════════
+  sock.ev.on("messages.upsert", async (m) => {
+    if (m.type !== "notify") return;
+
+    for (const msg of m.messages) {
+      if (msg.key.fromMe) continue;
+
+      const remoteJid = msg.key.remoteJid;
+
+      if (!remoteJid || remoteJid === "status@broadcast" || remoteJid.endsWith("@g.us")) continue;
+
+      // Détection de l'expéditeur réel (gestion des JID LID)
+      const participantJid = msg.key.participant || remoteJid;
+      const rawJid = participantJid.split("@")[0];
+      const rawSenderNumber = rawJid.includes(":") ? rawJid.split(":")[0] : rawJid;
+
+      const textMessage =
+        msg.message?.conversation ||
+        msg.message?.extendedTextMessage?.text ||
+        msg.message?.imageMessage?.caption ||
+        "";
+
+      const isImage = !!msg.message?.imageMessage;
+
+      if (!isImage && textMessage.trim() !== "") {
+        const text = textMessage.trim();
+        const isPrepopulatedMessage =
+          text.includes("Nouvelle commande") ||
+          text.includes("Demande de livraison") ||
+          text.includes("Paiement") ||
+          text.includes("Course") ||
+          text.includes("Recharge");
+
+        if (isPrepopulatedMessage) {
+          await sock.sendMessage(remoteJid, {
+            text:
+              "👋 Bonjour !\n\n" +
+              "Pour effectuer votre recharge de solde, veuillez enregistrer notre contact d'assistance dans votre répertoire, puis nous envoyer la capture d'écran du reçu complet depuis votre interface Wave.",
+          });
+          continue;
+        }
+      }
+
+      if (!isImage) continue;
+
+      let base64Image = null;
+
+      try {
+        const buffer = await downloadMediaMessage(
+          msg,
+          "buffer",
+          {},
+          {
+            logger: pino({ level: "silent" }),
+            reuploadRequest: sock.updateMediaMessage,
+          }
+        );
+        base64Image = buffer.toString("base64");
+      } catch (downloadErr) {
+        console.error("❌ Échec du téléchargement du média :", downloadErr);
+        await sock.sendMessage(remoteJid, {
+          text:
+            "⚠️ Impossible de lire la capture d'écran reçue.\n\n" +
+            "Veuillez enregistrer le contact d'assistance dans votre répertoire puis renvoyer le reçu complet depuis l'interface Wave.",
+        });
+        continue;
+      }
+
+      console.log(`📩 Reçu reçu de WhatsApp - Analyse par OCR.space API en cours...`);
+      try {
+        // 1. Analyser l'image avec OCR.space + Regex
+        const dataIA = await callOCRSpaceVerification({
+          apiKey: process.env.OCR_SPACE_API_KEY,
+          base64Image,
+          merchantAttendu: LEGACY_MERCHANT_NAME,
+          montantAttendu: null,
+        });
+
+        if (!dataIA.isValid || !dataIA.checklist.isDateRecent) {
+          await sock.sendMessage(remoteJid, {
+            text: "⚠️ Reçu de recharge rejeté : Reçu invalide, trop ancien ou non adressé au marchand de recharge.",
+          });
+          continue;
         }
 
-        const pickupCode = generateSecureCode(6);
-        const deliveryCode = generateSecureCode(6);
+        // 2. RECHERCHE ET VÉRIFICATION DE SÉCURITÉ DU LIVREUR
+        let targetPhoneSearch = rawSenderNumber;
+        const isLid = rawSenderNumber.length > 12 && !rawSenderNumber.startsWith("225");
 
-        await courseRef.update({
-            pickupCode: pickupCode,
-            deliveryCode: deliveryCode,
-            verificationInitialized: true,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        return res.status(200).json({ success: true, pickupCode, deliveryCode });
-    } catch (error) {
-        return res.status(500).json({ error: error.message });
-    }
-});
-
-/**
- * CAS SUPERMARCHÉ : Passation physique (Handoff) Coursier ➔ Livreur
- * Le Livreur scanne le code détenu par le Coursier pour récupérer la livraison.
- * Bloqué si le paiement du supermarché n'a pas été validé au préalable par le webhook WhatsApp.
- */
-app.post("/api/courses/validate-coursier-handoff", authenticateFirebaseUser, async (req, res) => {
-    const { courseId, enteredCode } = req.body;
-    if (!courseId || !enteredCode) {
-        return res.status(400).json({ error: "courseId et code requis." });
-    }
-
-    const courseRef = db.collection("livraisons").doc(courseId);
-
-    try {
-        await db.runTransaction(async (tx) => {
-            const courseSnap = await tx.get(courseRef);
-            if (!courseSnap.exists) throw new Error("NOT_FOUND");
-
-            const course = courseSnap.data();
-
-            // 1. S'assurer que le livreur authentifié est bien celui assigné à la livraison
-            if (course.assignedLivreurId !== req.user.uid && course.livreurId !== req.user.uid) {
-                throw new Error("UNAUTHORIZED_LIVREUR");
-            }
-
-            // 2. Vérification que le paiement Wave direct au supermarché a bien été vérifié par l'IA
-            // (Le champ 'supermarchePaymentVerified' est mis à true par ton webhook WhatsApp)
-            if (!course.supermarchePaymentVerified) {
-                throw new Error("WAITING_FOR_SUPERMARCHE_PAYMENT");
-            }
-
-            // 3. Validation du code de passation (pickupCode)
-            if (course.pickupCode !== enteredCode) {
-                throw new Error("INVALID_PICKUP_CODE");
-            }
-
-            // Validation de la passation physique et départ en transit
-            tx.update(courseRef, {
-                status: "in_transit",
-                handoffValidatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            });
-        });
-
-        // Notification Socket pour actualiser en temps réel les écrans de suivi
-        io.to(`track_${courseId}`).emit("orderStatus", "in_transit");
-
-        return res.status(200).json({ success: true, message: "Passation validée. Colis en transit." });
-
-    } catch (error) {
-        if (error.message === "NOT_FOUND") return res.status(404).json({ error: "Livraison introuvable." });
-        if (error.message === "UNAUTHORIZED_LIVREUR") return res.status(403).json({ error: "Accès refusé. Vous n'êtes pas assigné à cette course." });
-        if (error.message === "WAITING_FOR_SUPERMARCHE_PAYMENT") {
-            return res.status(400).json({ error: "Le paiement Wave du supermarché n'a pas encore été validé par le reçu complet sur WhatsApp." });
+        if (isLid && dataIA.buyerPhone) {
+          targetPhoneSearch = dataIA.buyerPhone;
         }
-        if (error.message === "INVALID_PICKUP_CODE") return res.status(400).json({ error: "Code de passation incorrect." });
-        return res.status(500).json({ error: error.message });
-    }
-});
 
-/**
- * LIVRAISON FINALE : Validation finale Client ➔ Livreur
- * Le livreur saisit le code de livraison donné par le client pour marquer la course comme livrée.
- */
-app.post("/api/courses/validate-delivery", authenticateFirebaseUser, async (req, res) => {
-    const { courseId, enteredCode } = req.body;
-    if (!courseId || !enteredCode) {
-        return res.status(400).json({ error: "courseId et code requis." });
-    }
+        const phoneVariants = getPhoneVariants(targetPhoneSearch);
 
-    const courseRef = db.collection("livraisons").doc(courseId);
+        let senderSnap = await db
+          .collection("users")
+          .where("telephone", "in", phoneVariants)
+          .limit(1)
+          .get();
 
-    try {
-        await db.runTransaction(async (tx) => {
-            const courseSnap = await tx.get(courseRef);
-            if (!courseSnap.exists) throw new Error("NOT_FOUND");
+        // Si recherche infructueuse et code de passation à 6 chiffres présent
+        if (senderSnap.empty && dataIA.codePassation) {
+          senderSnap = await db
+            .collection("users")
+            .where("codePassation", "==", dataIA.codePassation)
+            .limit(1)
+            .get();
+        }
 
-            const course = courseSnap.data();
-
-            if (course.assignedLivreurId !== req.user.uid && course.livreurId !== req.user.uid) {
-                throw new Error("UNAUTHORIZED_LIVREUR");
+        // Fallback : Recherche par UID
+        if (senderSnap.empty) {
+          for (const variant of phoneVariants) {
+            const userDocById = await db.collection("users").doc(variant).get();
+            if (userDocById.exists) {
+              senderSnap = { empty: false, docs: [userDocById] };
+              break;
             }
+          }
+        }
 
-            if (course.deliveryCode !== enteredCode) {
-                throw new Error("INVALID_DELIVERY_CODE");
-            }
+        if (senderSnap.empty) {
+          console.log(`❌ Rejet : Aucun livreur trouvé en BDD pour la recherche [${targetPhoneSearch}]`);
+          await sock.sendMessage(remoteJid, {
+            text: "⚠️ Votre numéro WhatsApp ne correspond à aucun compte livreur enregistré.",
+          });
+          continue;
+        }
 
-            // Clôture définitive de la course
-            tx.update(courseRef, {
-                status: "delivered",
-                deliveryValidatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        const senderData = senderSnap.docs[0].data();
+        const senderId = senderSnap.docs[0].id;
+        const isLivreur =
+          senderData && ["livreur", "livreur-externe"].includes(senderData.role);
+
+        if (!isLivreur) {
+          await sock.sendMessage(remoteJid, {
+            text: "⚠️ Ce canal est réservé exclusivement aux recharges de solde pour les livreurs.",
+          });
+          continue;
+        }
+
+        // 3. VÉRIFICATION STRICTE DE CORRESPONDANCE (Par numéro de téléphone OU par code de passation à 6 chiffres)
+        let isVerified = false;
+
+        if (dataIA.buyerPhone && dataIA.buyerPhone.trim() !== "") {
+          const extractedVariants = getPhoneVariants(dataIA.buyerPhone);
+          const livreurPhoneVariants = getPhoneVariants(senderData.telephone);
+          isVerified = extractedVariants.some(variant => livreurPhoneVariants.includes(variant));
+        }
+
+        if (!isVerified && dataIA.codePassation && senderData.codePassation) {
+          isVerified = dataIA.codePassation === senderData.codePassation;
+        }
+
+        if (!isVerified) {
+          await sock.sendMessage(remoteJid, {
+            text: "⚠️ Le numéro ou le code de passation figurant sur le reçu ne correspond pas à votre compte livreur.",
+          });
+          continue;
+        }
+
+        const montantCredite = Number(dataIA.detectedAmount || 0);
+        try {
+          await creditSoldeLivreurAtomique({
+            userId: senderId,
+            amount: montantCredite,
+            transactionId: dataIA.transactionId,
+            userName: senderData.prenom || senderData.nom || senderData.nomComplet || "Livreur",
+          });
+          await sock.sendMessage(remoteJid, {
+            text: `💰 Recharge validée ! Votre solde a été crédité de ${montantCredite} F.`,
+          });
+        } catch (e) {
+          if (e.code === "DUPLICATE_TRANSACTION") {
+            await sock.sendMessage(remoteJid, {
+              text: "⚠️ Ce reçu Wave a déjà été utilisé pour une précédente recharge.",
             });
-        });
-
-        io.to(`track_${courseId}`).emit("orderStatus", "delivered");
-
-        return res.status(200).json({ success: true, message: "Livraison finalisée avec succès." });
-
-    } catch (error) {
-        if (error.message === "NOT_FOUND") return res.status(404).json({ error: "Livraison introuvable." });
-        if (error.message === "UNAUTHORIZED_LIVREUR") return res.status(403).json({ error: "Vous n'êtes pas le livreur assigné à cette livraison." });
-        if (error.message === "INVALID_DELIVERY_CODE") return res.status(400).json({ error: "Le code de livraison client est invalide." });
-        return res.status(500).json({ error: error.message });
+          } else {
+            console.error("Erreur lors de la recharge atomique :", e);
+          }
+        }
+      } catch (error) {
+        console.error("❌ Erreur lors du traitement du message :", error);
+      }
     }
-});
+  });
+}
 
-server.listen(5000, () => console.log("🚀 Serveur Auto-Assign démarré"));
+connectToWhatsApp();

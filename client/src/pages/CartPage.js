@@ -1,33 +1,30 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+
+import confetti from 'canvas-confetti';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-  collection, doc, getDoc, serverTimestamp, addDoc
+  addDoc,
+  collection, doc, getDoc,
+  onSnapshot,
+  serverTimestamp
 } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import {
-  ArrowLeft, Camera, ShieldCheck, Trash2, X, Info, MapPin
+  ArrowLeft,
+  MapPin,
+  MessageSquare,
+  ShieldCheck, Trash2,
+  UserPlus,
+  X
 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { useCart } from '../Context/CartContext';
 import { auth, db } from '../firebase';
-import confetti from 'canvas-confetti';
-import 'react-toastify/dist/ReactToastify.css';
 import './CartPage.css';
 
 import headerImg from '../assets/mon-header.jpg';
 import qrCodeImg from '../assets/ton-qr-wave.png';
-
-// CORRECTIONS APPORTÉES DANS CE FICHIER :
-// 1. Suppression de la récupération de la clé Gemini côté client (elle ne
-//    quitte plus jamais le serveur — voir Cloud Function `verifyWaveReceipt`).
-// 2. Suppression du bouton caché "Simuler la validation IA" (secretTapCount /
-//    showSimulateBtn) : c'était un contournement total du paiement, présent
-//    dans le bundle livré à tous les utilisateurs.
-// 3. La commande est créée d'abord en statut "en_attente_paiement" (le
-//    montant vient du panier serveur-side de confiance à ce stade), puis
-//    c'est la Cloud Function qui vérifie le reçu ET marque la commande payée
-//    de façon atomique. Le client ne peut plus jamais s'auto-valider.
 
 export default function CartPage() {
   const navigate = useNavigate();
@@ -35,13 +32,11 @@ export default function CartPage() {
   const { cart, removeFromCart, clearCart } = useCart();
 
   const [isProcessing, setIsProcessing] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [showWaveModal, setShowWaveModal] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState('');
   const [activeTab, setActiveTab] = useState('link');
-  const [finalValidatedAmount, setFinalValidatedAmount] = useState(null);
+  const [currentOrderDocId, setCurrentOrderDocId] = useState(null);
 
   // Option Payer à la Livraison
   const [payOnDelivery, setPayOnDelivery] = useState(false);
@@ -52,9 +47,8 @@ export default function CartPage() {
   const [deliveryPhone, setDeliveryPhone] = useState('');
 
   const total = useMemo(() => {
-    if (finalValidatedAmount) return Math.round(finalValidatedAmount);
     return cart.reduce((acc, item) => acc + (Number(item.prix || 0) * (item.quantity || 1)), 0);
-  }, [cart, finalValidatedAmount]);
+  }, [cart]);
 
   const isSupermarketOrder = useMemo(() =>
     cart.some(item =>
@@ -63,7 +57,7 @@ export default function CartPage() {
       (item.nomBoutique || "").toUpperCase().includes("SUPER") ||
       (item.nomBoutique || "").toUpperCase().includes("MARCHE")
     ),
-  [cart]);
+    [cart]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -88,8 +82,46 @@ export default function CartPage() {
     return unsubscribe;
   }, []);
 
-  // Vérifie que les infos de livraison sont bien renseignées avant de
-  // permettre la validation du panier, quel que soit le mode de paiement.
+  // Écouteur en temps réel de la commande créée. 
+  useEffect(() => {
+    if (!currentOrderDocId) return;
+
+    const unsub = onSnapshot(doc(db, "orders", currentOrderDocId), (docSnap) => {
+      if (docSnap.exists()) {
+        const orderData = docSnap.data();
+
+        if (orderData.status === "en_attente_coursier" || orderData.status === "paye") {
+          setIsProcessing(false);
+          setShowWaveModal(false);
+
+          if (typeof confetti === 'function') {
+            confetti({ particleCount: 150, spread: 70 });
+          }
+          if (typeof clearCart === 'function') {
+            clearCart();
+          }
+
+          toast.success("Paiement validé par WhatsApp !");
+
+          navigate('/espacecoursier', {
+            state: {
+              isAutoAssign: true,
+              prefillName: orderData.clientName,
+              prefillPhone: orderData.clientPhone,
+              targetDestination: orderData.deliveryAddress,
+              totalColis: orderData.amount,
+              itemName: `Commande ${orderData.orderId}`,
+              orderReference: orderData.orderId,
+              whatsappReceiptValidated: true
+            }
+          });
+        }
+      }
+    });
+
+    return () => unsub();
+  }, [currentOrderDocId, navigate, clearCart]);
+
   const ensureDeliveryInfo = () => {
     if (!deliveryAddress.trim()) {
       toast.error("Veuillez indiquer votre adresse de livraison.");
@@ -117,105 +149,38 @@ export default function CartPage() {
     };
   };
 
-  const goToClientHome = (recipient, orderRef, amount) => {
-    navigate('/client-home', {
-      state: {
-        isAutoAssign: true,
-        prefillName: recipient.clientName,
-        prefillPhone: recipient.clientPhone,
-        targetDestination: recipient.deliveryAddress,
-        totalColis: amount,
-        itemName: `Commande ${orderRef}`,
-        orderReference: orderRef,
-      }
-    });
-  };
-
-  // ── Crée la commande en attente de paiement ──────────────────────────────
-  // Le montant, les articles et le vendeur sont fixés ici, avant tout appel
-  // de vérification — la Cloud Function relira CE document (jamais une
-  // valeur envoyée directement par le client au moment de la vérification).
-  const createPendingOrder = async () => {
-    const orderRef = `MG-${Math.random().toString(36).toUpperCase().substring(2, 8)}`;
-    const vendorIds = [...new Set(cart.map(i => i.vendorId).filter(Boolean))];
-    const recipient = buildRecipientFields();
-
-    const orderData = {
-      orderId: orderRef,
-      amount: total,
-      status: "en_attente_paiement",
-      userId: user.uid,
-      clientId: user.uid,
-      createdAt: serverTimestamp(),
-      items: [...cart],
-      type: isSupermarketOrder ? "supermarche" : "boutique",
-      vendorIds,
-      vendorId: vendorIds[0] || null,
-      ...recipient,
-    };
-
-    const docRef = await addDoc(collection(db, "orders"), orderData);
-    return { docRef, orderRef, recipient };
-  };
-
-  // ── Vérification du reçu Wave — appelle la Cloud Function serveur ───────
-  const handleVerify = async (file) => {
-    if (!user || !file) return;
+  // Initialise la commande en "en_attente_paiement" et ouvre la modale WhatsApp
+  const handleInitiateOnlinePayment = async () => {
+    if (!user || cart.length === 0) return;
     if (!ensureDeliveryInfo()) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => setPreviewUrl(reader.result);
-    reader.readAsDataURL(file);
-
     setIsProcessing(true);
-    setStatusMessage("MAMBO IA analyse le reçu...");
 
     try {
-      const base64 = await new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = (e) => resolve(e.target.result.split(',')[1]);
-        r.onerror = reject;
-        r.readAsDataURL(file);
-      });
+      const orderRef = `MG-${Math.random().toString(36).toUpperCase().substring(2, 8)}`;
+      const vendorIds = [...new Set(cart.map(i => i.vendorId).filter(Boolean))];
+      const recipient = buildRecipientFields();
 
-      // 1. On crée d'abord la commande, montant figé côté serveur (Firestore).
-      const { docRef, orderRef, recipient } = await createPendingOrder();
+      const orderData = {
+        orderId: orderRef,
+        amount: total,
+        status: "en_attente_paiement",
+        userId: user.uid,
+        clientId: user.uid,
+        createdAt: serverTimestamp(),
+        items: [...cart],
+        type: isSupermarketOrder ? "supermarche" : "boutique",
+        vendorIds,
+        vendorId: vendorIds[0] || null,
+        ...recipient,
+      };
 
-      // 2. La Cloud Function relit le montant depuis cette commande, appelle
-      // Gemini avec la clé gardée côté serveur, vérifie l'anti-doublon et
-      // marque la commande payée — tout ça de façon atomique, hors de portée
-      // du navigateur.
-      const functions = getFunctions();
-      const verifyWaveReceipt = httpsCallable(functions, 'verifyWaveReceipt');
-      const response = await verifyWaveReceipt({
-        orderId: docRef.id,
-        base64Image: base64,
-      });
-
-      const validatedAmount = response.data.amount;
-      setFinalValidatedAmount(validatedAmount);
-      setStatusMessage("✅ PAIEMENT CERTIFIÉ");
-
-      setShowWaveModal(false);
-
-      if (typeof confetti === 'function') {
-        confetti({ particleCount: 150, spread: 70 });
-      }
-      if (typeof clearCart === 'function') {
-        clearCart();
-      }
-
-      goToClientHome(recipient, orderRef, validatedAmount);
-
+      const docRef = await addDoc(collection(db, "orders"), orderData);
+      setCurrentOrderDocId(docRef.id);
+      setShowWaveModal(true);
     } catch (e) {
       console.error(e);
-      // Les erreurs de la Cloud Function (HttpsError) arrivent avec un
-      // message lisible : "Montant incorrect...", "Ce reçu Wave a déjà été
-      // utilisé.", etc.
-      const message = e.message || "Erreur de vérification du reçu.";
-      setStatusMessage(`❌ ${message}`);
-      toast.error(message);
-    } finally {
+      toast.error("Erreur lors de l'initialisation de la commande.");
       setIsProcessing(false);
     }
   };
@@ -225,7 +190,6 @@ export default function CartPage() {
     if (!ensureDeliveryInfo()) return;
 
     setIsProcessing(true);
-    setStatusMessage("Création de la commande en paiement à la livraison...");
 
     try {
       const orderRef = `MG-COD-${Math.random().toString(36).toUpperCase().substring(2, 8)}`;
@@ -250,19 +214,32 @@ export default function CartPage() {
       };
 
       await addDoc(collection(db, "orders"), orderData);
-
       toast.success("Commande créée ! Le vendeur va vous contacter pour assigner un livreur.");
-
       if (typeof clearCart === 'function') clearCart();
 
-      goToClientHome(recipient, orderRef, total);
-
+      navigate('/espacecoursier', {
+        state: {
+          isAutoAssign: true,
+          prefillName: recipient.clientName,
+          prefillPhone: recipient.clientPhone,
+          targetDestination: recipient.deliveryAddress,
+          totalColis: total,
+          itemName: `Commande ${orderRef}`,
+          orderReference: orderRef,
+        }
+      });
     } catch (e) {
       console.error(e);
-      toast.error("Erreur lors de la création de la commande");
+      toast.error("Erreur lors de l'creation de la commande");
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleOpenWhatsAppAssist = () => {
+    const phone = "2250778073456";
+    const text = encodeURIComponent(`Bonjour Mambo Assist, voici mon reçu de paiement Wave pour ma commande.`);
+    window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
   };
 
   return (
@@ -270,8 +247,8 @@ export default function CartPage() {
       <ToastContainer theme="dark" position="top-center" />
 
       <header className="cart-header-immersive">
-        <img src={headerImg} alt="Header" className="header-img"/>
-        <button className="back-btn-blur" onClick={() => navigate(-1)}><ArrowLeft/></button>
+        <img src={headerImg} alt="Header" className="header-img" />
+        <button className="back-btn-blur" onClick={() => navigate(-1)}><ArrowLeft /></button>
         <div className="header-content">
           <h1>Mon Panier</h1>
           <p>{cart.length} article{cart.length > 1 ? 's' : ''}</p>
@@ -282,7 +259,7 @@ export default function CartPage() {
         {cart.length === 0 ? (
           <div className="empty-cart">
             <p>Votre panier est vide</p>
-            <button onClick={() => navigate('/client-home')}>Retour aux courses</button>
+            <button onClick={() => navigate('/espacecoursier')}>Retour aux commandes</button>
           </div>
         ) : (
           <>
@@ -290,13 +267,13 @@ export default function CartPage() {
               {cart.map((item, idx) => (
                 <div key={idx} className="cart-item-card premium-card">
                   <div className="cart-item-main">
-                    <img src={item.image || item.imageUrl} className="item-thumb-large" alt=""/>
+                    <img src={item.image || item.imageUrl} className="item-thumb-large" alt="" />
                     <div className="item-details-rich">
                       <h3>{item.nom}</h3>
                       <p>{item.quantity || 1} x {Number(item.prix).toLocaleString()} F</p>
                     </div>
                     <button onClick={() => removeFromCart(item)} className="trash-mini">
-                      <Trash2 size={16}/>
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </div>
@@ -339,21 +316,28 @@ export default function CartPage() {
                 <div className="total-amount">{total.toLocaleString()} F</div>
               </div>
 
-              <label className="cod-checkbox">
-                <input
-                  type="checkbox"
-                  checked={payOnDelivery}
-                  onChange={(e) => setPayOnDelivery(e.target.checked)}
-                />
-                <span>Payer à la livraison (COD)</span>
-              </label>
+              {!isSupermarketOrder && (
+                <label className="cod-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={payOnDelivery}
+                    onChange={(e) => setPayOnDelivery(e.target.checked)}
+                  />
+                  <span>Payer à la livraison (COD)</span>
+                </label>
+              )}
 
               <button
                 className="checkout-btn-main"
-                onClick={payOnDelivery ? handleCashOnDelivery : () => { if (ensureDeliveryInfo()) setShowWaveModal(true); }}
+                onClick={payOnDelivery ? handleCashOnDelivery : handleInitiateOnlinePayment}
                 disabled={isProcessing}
               >
-                {payOnDelivery ? 'COMMANDER + PAYER À LA LIVRAISON' : 'PAYER MAINTENANT PAR WAVE'}
+                {isSupermarketOrder
+                  ? 'COMMANDER ET PAYER VIA WAVE'
+                  : payOnDelivery
+                    ? 'COMMANDER + PAYER À LA LIVRAISON'
+                    : 'PAYER MAINTENANT PAR WAVE'
+                }
               </button>
             </section>
           </>
@@ -373,50 +357,60 @@ export default function CartPage() {
             </div>
 
             <div className="p-4 text-center wave-body">
-              <div className="p-3 mb-4 text-left border bg-blue-500/10 border-blue-500/20 rounded-2xl">
-                <p className="text-[10px] font-bold text-blue-400 uppercase mb-1 flex items-center gap-1">
-                  <Info size={14}/> Étape 1 : Assistance
+
+              <div className="p-4 mb-4 text-left border bg-emerald-500/10 border-emerald-500/30 rounded-2xl">
+                <p className="text-[10px] font-black text-emerald-500 uppercase mb-1 flex items-center gap-1.5 tracking-wider">
+                  <UserPlus size={15} /> ÉTAPE 1 : ENREGISTRER LE CONTACT
                 </p>
-                <p className="text-[11px] text-slate-300 leading-tight">
-                  Enregistrez le contact <strong>+225 07 78 07 34 56</strong>
+                <p className="text-[12px] text-slate-100 font-medium leading-normal mb-2">
+                  Ajoutez ce contact à votre répertoire afin de pouvoir lui partager votre reçu complet depuis Wave :
                 </p>
+                <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-700/50 flex justify-between items-center">
+                  <span className="font-mono text-white text-[13px] font-bold select-all">+225 07 78 07 34 56</span>
+                  <span className="text-[9px] bg-emerald-500 text-slate-900 px-2 py-0.5 rounded-md font-extrabold uppercase">Mambo Assist</span>
+                </div>
               </div>
 
               <div className="mb-6 payment-toggle">
                 <button className={activeTab === 'link' ? 'active' : ''} onClick={() => setActiveTab('link')}>Lien Direct</button>
-                <button className={activeTab === 'qr' ? 'active' : ''} onClick={() => setActiveTab('qr')}>QR Code</button>
+                <button className={activeTab === 'qr' ? 'active' : ''} onClick={() => setActiveTab('qr')}>QR Code Marchand</button>
               </div>
 
               {activeTab === 'link' ? (
                 <button className="mb-6 wave-link-btn" onClick={() => window.open(`https://pay.wave.com/m/M_ci_fAQd8MgriWne/c/ci/`, '_blank')}>
-                  OUVRIR WAVE
+                  OUVRIR WAVE ET PAYER
                 </button>
               ) : (
                 <img src={qrCodeImg} alt="QR" className="w-32 h-32 mx-auto mb-6" />
               )}
 
-              <div className="ia-upload-zone">
-                <p className="text-[10px] font-bold text-emerald-500 uppercase mb-2">
-                  Étape 2 : Scanner le reçu complet
+              <div className="p-4 text-left border bg-slate-800/40 border-slate-700/50 rounded-2xl">
+                <p className="text-[10px] font-black text-emerald-400 uppercase mb-1 flex items-center gap-1.5 tracking-wider">
+                  <MessageSquare size={15} /> ÉTAPE 2 : PARTAGER LE REÇU OFFICIEL
                 </p>
-                <div className={`upload-box-ia ${isProcessing ? 'scanning' : ''}`} onClick={() => !isProcessing && document.getElementById('fileIn').click()}>
-                  {previewUrl ? (
-                    <img src={previewUrl} className="receipt-preview" alt="Reçu" />
-                  ) : (
-                    <div className="text-slate-500">
-                      <Camera size={40}/>
-                      <p className="text-[10px] mt-2 font-bold uppercase px-4">Capturer le reçu BLANC détaillé</p>
-                    </div>
-                  )}
-                  {isProcessing && <div className="scanner-line"></div>}
-                </div>
-                <input type="file" id="fileIn" hidden accept="image/*" onChange={(e) => e.target.files?.[0] && handleVerify(e.target.files[0])} />
+                <p className="text-[12px] text-slate-200 leading-relaxed mb-3">
+                  Une fois le paiement effectué dans Wave, cliquez sur <strong>Partager le reçu</strong> et sélectionnez <strong>Mambo Assist</strong> sur WhatsApp. Notre système valide automatiquement votre transfert à sa réception.
+                </p>
+
+                <button
+                  onClick={handleOpenWhatsAppAssist}
+                  className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-[13px] transition-colors"
+                >
+                  <MessageSquare size={16} />
+                  Ouvrir WhatsApp Mambo Assist
+                </button>
               </div>
 
-              <div className="mt-4 terminal-feedback">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
-                  {statusMessage || "En attente du reçu Wave..."}
-                </span>
+              <div className="mt-5 terminal-feedback">
+                <div className="flex items-center justify-center gap-2 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                    Analyse WhatsApp en direct...
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Votre coursier recevra instantanément la liste et le reçu validé dès réception du message.
+                </p>
               </div>
             </div>
           </div>

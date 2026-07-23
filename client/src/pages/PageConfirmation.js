@@ -1,3 +1,4 @@
+
 import { addDoc, collection, doc, getDoc, serverTimestamp } from "firebase/firestore";
 import {
   ArrowRight, Loader2,
@@ -25,15 +26,18 @@ import imgVtc            from "../assets/vtc.png";
 
 import "./PageConfirmation.css";
 
+// URL de votre serveur Node.js hébergé sur Render
+const API_URL = "https://mambo-5bt2.onrender.com";
+
 const VEHICLE_CONFIG = {
   // ── Ruraux ────────────────────────────────────────────────────────────────
-  moto:       { img: imgMoto,           label: "MOTO RURALE",  description: "Course ou livraison rapide", features: ["Rapide","Zone Rurale"],     color: "#10b981", isRural: true },
-  saloni:     { img: imgSaloni,         label: "SALONI",       description: "Tricycle local polyvalent",  features: ["Pratique","Local"],          color: "#10b981", isRural: true },
-  antara:     { img: imgAntara,         label: "ANTARA",       description: "Transport de marchandises",  features: ["Confortable","Spacieux"],    color: "#f97316", isRural: true },
-  vtc:        { img: imgVtc,            label: "VTC RURAL",    description: "Chauffeur privé disponible", features: ["Premium","Sécurisé"],        color: "#6366f1", isRural: true },
+  moto:       { img: imgMoto,         label: "MOTO RURALE",  description: "Course ou livraison rapide", features: ["Rapide","Zone Rurale"],     color: "#10b981", isRural: true },
+  saloni:     { img: imgSaloni,       label: "SALONI",       description: "Tricycle local polyvalent",  features: ["Pratique","Local"],          color: "#10b981", isRural: true },
+  antara:     { img: imgAntara,       label: "ANTARA",       description: "Transport de marchandises",  features: ["Confortable","Spacieux"],    color: "#f97316", isRural: true },
+  vtc:        { img: imgVtc,          label: "VTC RURAL",    description: "Chauffeur privé disponible", features: ["Premium","Sécurisé"],        color: "#6366f1", isRural: true },
   // Alias ruraux
-  moto_rurale:{ img: imgMoto,           label: "MOTO RURALE",  description: "Course ou livraison rapide", features: ["Rapide","Zone Rurale"],     color: "#10b981", isRural: true },
-  vtc_rural:  { img: imgVtc,            label: "VTC RURAL",    description: "Chauffeur privé disponible", features: ["Premium","Sécurisé"],       color: "#6366f1", isRural: true },
+  moto_rurale:{ img: imgMoto,         label: "MOTO RURALE",  description: "Course ou livraison rapide", features: ["Rapide","Zone Rurale"],     color: "#10b981", isRural: true },
+  vtc_rural:  { img: imgVtc,          label: "VTC RURAL",    description: "Chauffeur privé disponible", features: ["Premium","Sécurisé"],       color: "#6366f1", isRural: true },
   // ── Urbains ───────────────────────────────────────────────────────────────
   MotoNoStress:    { img: motoNoStressImg,   label: "NO STRESS",     description: "Livraison sans urgence",    features: ["Économique","Flexible"],   color: "#10b981" },
   Moto:            { img: motoImg,           label: "STANDARD",      description: "Livraison rapide sous 3h",  features: ["Rapide","Fiable"],         color: "#10b981" },
@@ -42,7 +46,7 @@ const VEHICLE_CONFIG = {
   VtcConfort:      { img: carConfortImg,     label: "VTC CONFORT",   description: "Course premium",            features: ["3 places","WiFi"],         color: "#6366f1" },
   VtcSuv:          { img: carSuvImg,         label: "VTC SUV",       description: "Véhicule spacieux",         features: ["6 places","Grand coffre"], color: "#8b5cf6" },
   TaxiEco:         { img: taxiEcoImg,        label: "TAXI ÉCO",      description: "Tarif réglementé",          features: ["Compteur","Officiel"],     color: "#f59e0b", isTaxi: true, isCompteur: true },
-  TaxiConfort:     { img: taxiConfortImg,    label: "TAXI CONFORT",  description: "Taxi confort climatisé",    features: ["Compteur","Climatisé"],   color: "#f59e0b", isTaxi: true, isCompteur: true },
+  TaxiConfort:     { img: taxiConfortImg,    label: "TAXI CONFORT",  description: "Taxi confort climatisé",    features: ["Compteur","Climatisé"],    color: "#f59e0b", isTaxi: true, isCompteur: true },
   TaxiArrangement: { img: taxiArrangementImg,label: "ARRANGEMENT",   description: "Prix négocié librement",    features: ["Prix libre","Négociable"], color: "#8b5cf6", isTaxi: true, isArrangement: true },
 };
 
@@ -109,9 +113,6 @@ export default function PageConfirmation() {
     }
     setIsSubmitting(true);
     try {
-      // Nom / téléphone à contacter sur le terrain. Pour un tiers on garde
-      // thirdPartyName/Phone (déjà saisis) ; sinon on va chercher le profil
-      // du client connecté, sans quoi aucun numéro n'atterrit sur la course.
       let clientName = data.thirdPartyName || data.clientName || "";
       let clientPhone = data.thirdPartyPhone || data.clientPhone || "";
 
@@ -131,6 +132,7 @@ export default function PageConfirmation() {
       const courseData = {
         clientId:       auth.currentUser.uid,
         clientUserId:   auth.currentUser.uid,
+        orderId:        data.orderId || null,
         pickupAddress:  data.pickupAddress || data.pickup || "Position actuelle",
         dropoffAddress: data.destination || data.dest || data.dropoffAddress || "",
         destination:    data.destination || data.dest || data.dropoffAddress || "",
@@ -157,11 +159,33 @@ export default function PageConfirmation() {
       };
 
       const docRef = await addDoc(collection(db, "courses"), courseData);
+
+      // Génération des codes d'authentification sur le serveur Render via API HTTP
+      try {
+        const idToken = await auth.currentUser.getIdToken();
+        const response = await fetch(`${API_URL}/api/courses/initialize-verification-codes`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${idToken}`
+          },
+          body: JSON.stringify({ courseId: docRef.id })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Une erreur est survenue.");
+        }
+      } catch (codeErr) {
+        console.error("Erreur génération codes de passation:", codeErr);
+      }
+
       toast.success("Course confirmée !");
 
       setTimeout(() => {
         navigate(`/tracking/${docRef.id}`, { replace: true });
       }, 800);
+      
     } catch (err) {
       console.error("Erreur confirmation :", err);
       toast.error("Erreur lors de la validation.");

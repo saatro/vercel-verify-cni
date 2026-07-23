@@ -1,8 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { auth, db } from "../firebase";
 import { 
-  signInWithEmailAndPassword, 
-  signOut 
+  signInWithEmailAndPassword 
 } from "firebase/auth";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
@@ -27,12 +26,12 @@ import jacquevilleIllustration from "../assets/jacqueville-illustration.jpg";
 
 const SECTORS_LOGIN_CONFIG = {
   abidjan: { name: "Abidjan", role: "livreur", isRural: false, bg: abidjanIllustration },
-  alepe: { name: "Alépé", role: "livreur-alepe", isRural: true, bg: alepeIllustration },
-  azaguie: { name: "Azaguié", role: "livreur-azaguie", isRural: true, bg: azaguieIllustration },
-  agboville: { name: "Agboville", role: "livreur-agboville", isRural: true, bg: agbovilleIllustration },
-  adzope: { name: "Adzopé", role: "livreur-adzope", isRural: true, bg: adzopeIllustration },
-  dabou: { name: "Dabou", role: "livreur-dabou", isRural: true, bg: dabouIllustration },
-  jacqueville: { name: "Jacqueville", role: "livreur-jacqueville", isRural: true, bg: jacquevilleIllustration }
+  alepe: { name: "Alépé", role: "livreur-externe", isRural: true, bg: alepeIllustration },
+  azaguie: { name: "Azaguié", role: "livreur-externe", isRural: true, bg: azaguieIllustration },
+  agboville: { name: "Agboville", role: "livreur-externe", isRural: true, bg: agbovilleIllustration },
+  adzope: { name: "Adzopé", role: "livreur-externe", isRural: true, bg: adzopeIllustration },
+  dabou: { name: "Dabou", role: "livreur-externe", isRural: true, bg: dabouIllustration },
+  jacqueville: { name: "Jacqueville", role: "livreur-externe", isRural: true, bg: jacquevilleIllustration }
 };
 
 export default function LoginLivreurSecteurs() {
@@ -57,7 +56,7 @@ export default function LoginLivreurSecteurs() {
     setLoading(true);
 
     try {
-      // 1. Recherche du compte par téléphone dans Firestore (évite les erreurs de format d'e-mail)
+      // 1. Recherche du compte par téléphone dans Firestore
       const usersRef = collection(db, "users");
       const q = query(usersRef, where("telephone", "==", phone));
       const querySnapshot = await getDocs(q);
@@ -70,24 +69,47 @@ export default function LoginLivreurSecteurs() {
       // 2. Récupération des données du compte existant
       const userDoc = querySnapshot.docs[0];
       const userData = userDoc.data();
+      const userRole = userData.role?.toLowerCase().trim();
 
-      // 3. Vérification de la cohérence de la zone ou du rôle
-      if (userData.role?.toLowerCase() !== currentSector.role && userData.role?.toLowerCase() !== "admin") {
+      // 3. Vérification du rôle attendu pour cette zone
+      if (userRole !== currentSector.role && userRole !== "admin") {
         setLoading(false);
         return toast.error(`Accès refusé : Votre compte n'est pas enregistré pour la zone ${currentSector.name}.`);
       }
 
-      // 4. Extraction de l'email enregistré (ex: "0564028263@mambo.livreur")
+      // 4. Pour les zones rurales, vérifier que la zone précise du compte
+      if (currentSector.isRural && userRole !== "admin") {
+        const userZone = (userData.sectorZone || userData.zone || "").toLowerCase().trim();
+        if (userZone !== selectedSectorKey) {
+          setLoading(false);
+          return toast.error(`Ce compte est enregistré pour une autre zone que ${currentSector.name}.`);
+        }
+      }
+
+      // Vérification locale du schéma saisi par rapport au schéma Firestore enregistré avant l'appel Auth
+      const inputPatternString = pattern.join("-");
+      if (userData.mamboLockPattern && userData.mamboLockPattern !== inputPatternString) {
+        setLoading(false);
+        return toast.error("Code schéma incorrect pour ce numéro.");
+      }
+
+      // 5. Extraction de l'email enregistré et génération du mot de passe technique sécurisé
       const technicalEmail = userData.email;
       const technicalPassword = generatePatternPassword(pattern, phone);
 
-      // 5. Authentification Firebase Auth finale
+      // 6. Authentification Firebase Auth finale
       await signInWithEmailAndPassword(auth, technicalEmail, technicalPassword);
-      
-      navigate("/livreur-home", { replace: true });
+
+      // 7. Redirection selon le rôle réel du compte
+      if (userRole === "livreur") {
+        navigate("/livreur-home", { replace: true });
+      } else {
+        const finalZone = userData.sectorZone || userData.zone || selectedSectorKey;
+        navigate(`/livreur-secteur/${finalZone}`, { replace: true });
+      }
     } catch (error) {
       console.error("Login Error:", error);
-      toast.error("Code schéma incorrect pour ce numéro.");
+      toast.error("Échec de la connexion. Vérifiez vos accès réseau ou vos identifiants.");
     } finally {
       setLoading(false);
     }
@@ -122,7 +144,7 @@ export default function LoginLivreurSecteurs() {
         </form>
 
         <footer className="auth-footer-links">
-          <Link to="/register-livreur/:zone" className="switch-auth-btn">REJOINDRE LA FLOTTE <ChevronRight size={16} /></Link>
+          <Link to={`/register-livreur/${selectedSectorKey}`} className="switch-auth-btn">REJOINDRE LA FLOTTE <ChevronRight size={16} /></Link>
         </footer>
       </div>
     </div>

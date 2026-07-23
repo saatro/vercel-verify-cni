@@ -2,7 +2,7 @@ import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
-export default function ProtectedRoute({ children, allow = [], userRole }) {
+export default function ProtectedRoute({ children, allow = [], userRole, userZone }) {
   const location = useLocation();
 
   // ✅ 1. PHASE DE CHARGEMENT STRICTE (Bloque la redirection tant que le rôle est inconnu)
@@ -23,11 +23,13 @@ export default function ProtectedRoute({ children, allow = [], userRole }) {
 
   // Nettoyage préventif du rôle pour la comparaison
   const cleanRole = userRole.toLowerCase().trim();
+  const cleanZone = (userZone || "").toLowerCase().trim();
 
   // ✅ 2. DÉFINITION DES ROUTES DE REDIRECTION (HOMES)
   const homeRoutes = {
     admin: "/admin-home",
     livreur: "/livreur-home",
+    "livreur-externe": cleanZone ? `/livreur-secteur/${cleanZone}` : "/acces",
     coursier: "/espace-coursier",
     vendeur: "/vendeur-dashboard",
     client: "/client-home",
@@ -36,7 +38,7 @@ export default function ProtectedRoute({ children, allow = [], userRole }) {
 
   // ✅ 3. VÉRIFICATION D'AUTORISATION COMPATIBLE ROLES DYNAMIQUES
   const isLivreurMatch = 
-    (allow.includes("livreur") || allow.some(r => r.startsWith("livreur-"))) && 
+    (allow.includes("livreur") || allow.includes("livreur-externe") || allow.some(r => r.startsWith("livreur-"))) && 
     cleanRole.startsWith("livreur");
 
   const isAuthorized = 
@@ -60,10 +62,12 @@ export default function ProtectedRoute({ children, allow = [], userRole }) {
     // Détermination de la route cible de secours
     let targetRoute = homeRoutes[cleanRole] || "/client-home";
     
-    // Gestion dynamique pour tous les livreurs régionaux (livreur-alepe, livreur-dabou, etc.)
-    if (cleanRole.startsWith("livreur-")) {
-      const zone = cleanRole.replace("livreur-", "");
-      targetRoute = `/livreur-secteur/${zone}`;
+    // Gestion dynamique pour tous les livreurs régionaux avec fallback sur zone
+    if (cleanRole === "livreur-externe" && cleanZone) {
+      targetRoute = `/livreur-secteur/${cleanZone}`;
+    } else if (cleanRole.startsWith("livreur-") && cleanRole !== "livreur-externe") {
+      const zoneStr = cleanRole.replace("livreur-", "");
+      targetRoute = `/livreur-secteur/${zoneStr}`;
     }
 
     // Évite une boucle infinie de redirection vers l'URL courante
@@ -71,7 +75,7 @@ export default function ProtectedRoute({ children, allow = [], userRole }) {
       return children;
     }
 
-    console.warn(`🔒 Rôle [${userRole}] non autorisé sur ${location.pathname}. Vers ${targetRoute}`);
+    console.warn(`🔒 Rôle [${userRole}] Zone [${cleanZone}] non autorisé sur ${location.pathname}. Vers ${targetRoute}`);
     return <Navigate to={targetRoute} replace />;
   }
 

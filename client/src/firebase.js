@@ -1,9 +1,9 @@
 import { initializeApp } from "firebase/app";
 import { browserLocalPersistence, getAuth, setPersistence } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, clearIndexedDbPersistence } from "firebase/firestore";
 import { getMessaging, isSupported } from "firebase/messaging";
+import { getFunctions } from "firebase/functions";
 
-// Configuration statique pour éviter les problèmes de chargement des variables d'environnement
 const firebaseConfig = {
   apiKey: "AIzaSyAUXDW7BnDcbjhXVIvvCOpU7jkgD3aGnUc",
   authDomain: "livraison-moto.firebaseapp.com",
@@ -16,13 +16,18 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-
-// Désactivation de la vérification reCAPTCHA pour les tests avec numéros de téléphone
 auth.settings.appVerificationDisabledForTesting = true; 
 
-export const db = getFirestore(app);
+export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+});
 
-// Messaging initialisé par défaut à null
+// Purge des opérations en attente corrompues
+clearIndexedDbPersistence(db).catch((err) => {
+  console.warn("Restauration du cache Firestore terminée ou ignorée :", err.message);
+});
+
+export const functions = getFunctions(app);
 export const messaging = null; 
 
 export const getFirebaseMessaging = async () => {
@@ -36,7 +41,6 @@ export const getFirebaseMessaging = async () => {
   }
 };
 
-// Configuration de la persistance pour rester connecté après rafraîchissement
 setPersistence(auth, browserLocalPersistence)
   .catch((error) => console.error("Erreur de persistance auth:", error));
 

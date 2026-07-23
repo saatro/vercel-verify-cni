@@ -13,14 +13,19 @@
 .DS_Store
 
 # environment files
+.env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-# firebase admin key (⚠️ très sensible)
+# firebase admin keys & sensitive JSONs
+serviceAccountKey.json
 firebase-service-account.json
 *.json
+!package.json
+!package-lock.json
+!tsconfig.json
 
 # SSL certificates (⚠️ ne jamais publier)
 ssl/key.pem
@@ -30,3 +35,4 @@ ssl/cert.pem
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log

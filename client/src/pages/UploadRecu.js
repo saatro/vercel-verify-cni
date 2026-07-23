@@ -1,15 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, Copy, ExternalLink, Camera,
-  Loader2, CheckCircle2, AlertCircle,
-  Sparkles, Zap, MessageCircle
+  ChevronLeft, ExternalLink, Zap, MessageCircle, Check
 } from 'lucide-react';
-import { useWaveScan } from '../hooks/useWaveScan';
-import { uploadToCloudinary } from '../utils/cloudinary'; // Importation correcte
 import './UploadRecu.css';
 
 const ADMIN_PHONE = '0778073456';
@@ -17,14 +13,8 @@ const WAVE_LINK = 'https://pay.wave.com/m/M_ci_fAQd8MgriWne/c/ci/';
 
 export default function UploadRecu() {
   const navigate = useNavigate();
-  const fileRef = useRef(null);
-
-  const [step, setStep] = useState(1);
   const [userData, setUserData] = useState(null);
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [copied, setCopied] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
+  const [whatsappOpened, setWhatsappOpened] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -35,169 +25,73 @@ export default function UploadRecu() {
     return unsub;
   }, [navigate]);
 
-  const { scan, status, result, errorMsg, reset, isScanning } = useWaveScan({
-    userData,
-    merchantName: "Paiement LEGACY",
-    mode: 'auto',
-    uploadFunction: uploadToCloudinary, // Utilisation de votre utilitaire
-    onSuccess: (res) => {
-      console.info('[WaveScan] Crédité :', res.amount, 'F');
-    },
-  });
-
-  const scanStateLabel = {
-    idle: null,
-    scanning: 'Analyse IA en cours — veuillez patienter…',
-    success: `+${result?.amount?.toLocaleString() ?? '?'} F crédités avec succès !`,
-    error: errorMsg || 'Reçu non conforme. Veuillez réessayer.',
-  }[status];
-
-  const handleFile = useCallback((f) => {
-    if (!f || !f.type.startsWith('image/')) return;
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
-    reset();
-  }, [reset]);
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setDragOver(false);
-    handleFile(e.dataTransfer.files[0]);
-  };
-
-  const copyPhone = () => {
-    navigator.clipboard.writeText(ADMIN_PHONE);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   const openWhatsApp = () => {
-    const text = `Bonjour Assistance LEGACY,\nJe viens de valider mon paiement.\n\n*ID Transaction :* ${result?.transactionId}\n*Montant :* ${result?.amount} F CFA`;
+    const userIdentifier = userData 
+      ? `\n(Livreur: ${userData.nomComplet || userData.nom || 'Inconnu'} | Tél: ${userData.telephone || 'Non renseigné'} | UID: ${userData.id})` 
+      : '';
+    
+    const text = `Bonjour Assistance MAMBO,\nJe prépare mon rechargement de solde via Wave.${userIdentifier}\n\nVoici le reçu de ma transaction pour le contrôle et le crédit immédiat de mon solde.`;
+    
     window.open(`https://wa.me/225${ADMIN_PHONE}?text=${encodeURIComponent(text)}`, '_blank');
+    setWhatsappOpened(true);
   };
 
-  if (step === 1) return (
+  const handleWavePay = () => {
+    window.open(WAVE_LINK, '_blank');
+  };
+
+  return (
     <div className="ur-root">
       <button className="ur-back" onClick={() => navigate(-1)}>
         <ChevronLeft size={20} />
       </button>
 
       <div className="ur-card ur-animate-in">
-        <div className="ur-badge"><Zap size={14} fill="currentColor" /> Wave Pay</div>
-        <h1 className="ur-title">Recharger<br />mon compte</h1>
-        <p className="ur-subtitle">
-          Envoyez le montant souhaité au numéro ci-dessous,<br />
-          puis importez votre reçu — la validation est instantanée.
-        </p>
+        <div className="ur-badge"><Zap size={12} fill="currentColor" /> Rechargement Solde</div>
+        <h1 className="ur-title">Rechargement</h1>
+        <p className="ur-subtitle">Ouvrez la discussion WhatsApp puis effectuez votre paiement sur Wave.</p>
 
-        <button className="ur-phone-box" onClick={copyPhone}>
-          <span className="ur-phone-label">NUMÉRO WAVE</span>
-          <span className="ur-phone-num">{ADMIN_PHONE}</span>
-          <span className={`ur-copy-chip ${copied ? 'ur-copy-chip--done' : ''}`}>
-            <Copy size={12} /> {copied ? 'Copié !' : 'Copier'}
-          </span>
-        </button>
-
-        <a className="ur-wave-btn" href={WAVE_LINK} target="_blank" rel="noopener noreferrer">
-          <ExternalLink size={16} /> Ouvrir Wave
-        </a>
-
-        <button className="ur-cta" onClick={() => setStep(2)}>
-          J'ai effectué le paiement →
-        </button>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="ur-root">
-      <button className="ur-back" onClick={() => { setStep(1); reset(); setFile(null); setPreview(null); }}>
-        <ChevronLeft size={20} />
-      </button>
-
-      <div className="ur-card ur-animate-in">
-        {status === 'success' ? (
-          <div className="ur-success">
-            <div className="ur-success-ring">
-              <CheckCircle2 size={52} strokeWidth={1.5} color="#10b981" />
+        {/* TIMELINE SIMPLIFIÉE : ORDRE INVERSÉ */}
+        <div className="ur-timeline">
+          
+          {/* ÉTAPE 1 : OUVRIR WHATSAPP */}
+          <div className={`ur-time-item ${whatsappOpened ? 'ur-time-done' : 'ur-time-active'}`}>
+            <div className="ur-time-badge">
+              {whatsappOpened ? <Check size={14} /> : 1}
             </div>
-            <h2 className="ur-success-title">Reçu analysé !</h2>
-            <p className="ur-success-amount">+{result?.amount?.toLocaleString()} F</p>
-            
-            <div className="ur-assistance-card">
-              <div className="ur-assistance-header">
-                <span className="ur-assistance-tag">⚠️ Dernière étape</span>
-              </div>
-              <p>
-                Pour finaliser votre crédit, <strong>enregistrez le numéro d'assistance</strong> ci-dessous et envoyez-nous votre reçu complet sur WhatsApp.
-              </p>
-              <button className="ur-whatsapp-btn" onClick={openWhatsApp}>
-                <MessageCircle size={18} /> Contacter l'assistance
+            <div className="ur-time-content">
+              <h3>1. Préparer WhatsApp</h3>
+              <p>Ouvrez la discussion avec l'assistance pour recevoir le reçu.</p>
+              <button 
+                className="ur-inline-btn ur-btn-wa" 
+                onClick={openWhatsApp}
+              >
+                <MessageCircle size={14} /> Ouvrir la discussion WhatsApp
               </button>
-              <p className="ur-assistance-footer">Le contrôle est rapide et sécurisé.</p>
             </div>
-
-            <div className="ur-txid">
-              <span>ID Transaction</span>
-              <code>{result?.transactionId}</code>
-            </div>
-            <button className="ur-cta" onClick={() => navigate(-1)}>
-              Retour au tableau de bord
-            </button>
           </div>
-        ) : (
-          <>
-            <div className="ur-badge"><Sparkles size={14} /> Vérification IA</div>
-            <h1 className="ur-title">Importer<br />le reçu</h1>
 
-            <div
-              className={`ur-dropzone
-                ${preview ? 'ur-dropzone--filled' : ''}
-                ${dragOver ? 'ur-dropzone--drag' : ''}
-                ${isScanning ? 'ur-dropzone--scanning' : ''}
-              `}
-              onClick={() => !isScanning && fileRef.current?.click()}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-            >
-              {isScanning && <div className="ur-scan-line" />}
-
-              {preview ? (
-                <img src={preview} alt="Reçu Wave" className="ur-preview" />
-              ) : (
-                <div className="ur-dropzone-placeholder">
-                  <Camera size={40} strokeWidth={1.2} />
-                  <span>Cliquez ou déposez le reçu Wave ici</span>
-                </div>
-              )}
-
-              {isScanning && (
-                <div className="ur-scanning-overlay">
-                  <Loader2 size={28} className="ur-spin" />
-                  <span>Analyse en cours…</span>
-                </div>
-              )}
+          {/* ÉTAPE 2 : PAIEMENT WAVE */}
+          <div className={`ur-time-item ${!whatsappOpened ? 'ur-time-locked' : 'ur-time-active'}`}>
+            <div className="ur-time-badge">2</div>
+            <div className="ur-time-content">
+              <h3>2. Payer et Transmettre</h3>
+              <p>Payez sur Wave puis partagez directement le reçu complet dans la discussion.</p>
+              <button 
+                className="ur-wave-btn-timeline" 
+                onClick={handleWavePay}
+                disabled={!whatsappOpened}
+              >
+                <ExternalLink size={14} /> Ouvrir Wave & Payer
+              </button>
             </div>
+          </div>
 
-            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFile(e.target.files[0])} />
+        </div>
 
-            {scanStateLabel && (
-              <div className={`ur-status-banner ur-status-banner--${status}`}>
-                {status === 'scanning' ? <Loader2 size={14} className="ur-spin" /> : <AlertCircle size={14} />}
-                <span>{scanStateLabel}</span>
-              </div>
-            )}
-
-            <button
-              className={`ur-cta ${(!file || isScanning) ? 'ur-cta--disabled' : ''}`}
-              disabled={!file || isScanning}
-              onClick={() => scan(file)}
-            >
-              {isScanning ? <><Loader2 size={18} className="ur-spin" /> Analyse…</> : 'Valider le reçu'}
-            </button>
-          </>
-        )}
+        <p className="ur-footer-notice">
+          Le contrôle du reçu complet depuis l'interface Wave garantit le crédit automatique et rapide de votre solde.
+        </p>
       </div>
     </div>
   );
