@@ -1,16 +1,21 @@
-import fs from "fs";
+import admin from "firebase-admin";
+import dotenv from "dotenv";
 
-// Remplace le chemin par le fichier JSON que tu as téléchargé depuis Firebase
-const serviceAccountPath = "./serviceAccountKey.json";
+dotenv.config();
 
-// Lire le fichier JSON
-const raw = fs.readFileSync(serviceAccountPath, "utf8");
-const json = JSON.parse(raw);
+// Reconstitution de la clé privée avec la gestion des saut de lignes (\n)
+const privateKey = process.env.FIREBASE_PRIVATE_KEY 
+  ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n") 
+  : undefined;
 
-// Transformer la clé privée en format compatible .env
-const privateKey = json.private_key.replace(/\n/g, "\\n");
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: privateKey,
+    }),
+  });
+}
 
-// Afficher la ligne complète à copier dans ton .env
-console.log(`FIREBASE_PRIVATE_KEY=${privateKey}`);
-console.log(`FIREBASE_CLIENT_EMAIL=${json.client_email}`);
-console.log(`FIREBASE_PROJECT_ID=${json.project_id}`);
+const db = admin.firestore();
