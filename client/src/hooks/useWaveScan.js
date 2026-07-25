@@ -1,21 +1,12 @@
 // hooks/useWaveScan.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Hook réutilisable : scan reçu Wave → vérification serveur → crédit compte
-//
-// CORRECTIONS APPORTÉES :
-// - Plus aucun appel direct à Gemini depuis le navigateur (la clé API n'est
-//   plus jamais récupérée ni exposée côté client).
-// - Plus aucune écriture directe (crédit de solde, paiements_verifies) depuis
-//   le client : tout passe par la Cloud Function callable `verifyWaveTopUp`,
-//   qui vérifie ET crédite de façon atomique côté serveur.
-// - La déduplication anti-doublon est gérée côté serveur (transactionId comme
-//   ID de document), donc plus de race condition possible.
+// Hook réutilisable : scan reçu Wave OU activation Pass Free → vérification
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useCallback } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
-// ── Compression et encodage de l'image (reste côté client, pas sensible) ────
+// ── Compression et encodage de l'image ──────────────────────────────────────
 async function encodeImage(file, maxWidth = 1024) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -38,7 +29,7 @@ async function encodeImage(file, maxWidth = 1024) {
   });
 }
 
-// ── Archivage Cloudinary (optionnel, non sensible : juste une image) ───────
+// ── Archivage Cloudinary ───────────────────────────────────────────────────
 async function uploadToCloudinary(file, cloudUrl, preset) {
   const form = new FormData();
   form.append('file', file);
@@ -50,64 +41,93 @@ async function uploadToCloudinary(file, cloudUrl, preset) {
 }
 
 /**
+ * Redirige l'utilisateur vers la numérotation pour enregistrer le contact assistance
+ */
+export function saveAssistanceContact(phone = "+2250000000000") {
+  window.location.href = `tel:${phone}`;
+}
+
+/**
  * @param {object} options
- * @param {object} options.userData         - User Firestore Doc (juste pour l'affichage local)
+ * @param {object} options.userData         - User Firestore Doc
  * @param {string} options.mode             - "solde" | "jetons" | "pass" | "auto"
- * @param {number[]} [options.allowedAmounts] - Montants fixes (ex: [5000, 10000])
+ * @param {number[]} [options.allowedAmounts] - Montants fixes
+ * @param {boolean} [options.isContactSaved] - Indique si le contact assistance est enregistré
+ * @param {function} [options.onSuccess]    - Callback après validation
  */
 export function useWaveScan({
   mode = 'auto',
   cloudinaryUrl = null,
   cloudinaryPreset = null,
   allowedAmounts = null,
+  isContactSaved = false,
   onSuccess = null,
 } = {}) {
   const [status, setStatus] = useState('idle');
   const [result, setResult] = useState(null);
   const [errorMsg, setError] = useState('');
 
-  const scan = useCallback(async (file) => {
-    if (!file) return;
+  const scan = useCallback(async (file = null, passOptions = {}) => {
+    // 1. Contrôle obligatoire de l'enregistrement du contact assistance
+    if (!isContactSaved) {
+      const msg = "Veuillez d'abord enregistrer le contact assistance dans votre répertoire pour confirmer votre paiement depuis l'interface Wave.";
+      setError(msg);
+      setStatus('error');
+      saveAssistanceContact(); // Redirection automatique
+      return;
+    }
+
+    // 2. Si on n'est pas en mode "pass", un fichier image est obligatoire pour le scan
+    if (mode !== 'pass' && !file) {
+      setError("Veuillez sélectionner une image du reçu Wave.");
+      setStatus('error');
+      return;
+    }
 
     setStatus('scanning');
     setError('');
     setResult(null);
 
     try {
-      // 1. Encodage image
-      const base64 = await encodeImage(file);
-
-      // 2. Archivage Cloudinary (optionnel, avant l'appel serveur)
-      let imageUrl = null;
-      if (cloudinaryUrl && cloudinaryPreset) {
-        imageUrl = await uploadToCloudinary(file, cloudinaryUrl, cloudinaryPreset);
-      }
-
-      // 3. Vérification + crédit — entièrement côté serveur.
-      // La clé Gemini reste dans les secrets de la Cloud Function, jamais
-      // exposée au client. Le serveur fait aussi la déduplication et le
-      // crédit dans une même transaction Firestore atomique.
       const functions = getFunctions();
       const verifyWaveTopUp = httpsCallable(functions, 'verifyWaveTopUp');
-      const response = await verifyWaveTopUp({
-        base64Image: base64,
-        mode,
-        allowedAmounts,
-        imageUrl,
-      });
+      let response;
+
+      // 3. LOGIQUE PASS FREE (Sans aucun scan d'image)
+      if (mode === 'pass') {
+        response = await verifyWaveTopUp({
+          mode: 'pass',
+          hours: passOptions.hours || 12,
+          amount: passOptions.amount || 1000,
+          allowedAmounts,
+        });
+      } 
+      // 4. LOGIQUE DE SCAN CLASSIQUE (Reçu / Image)
+      else {
+        const base64 = await encodeImage(file);
+        let imageUrl = null;
+        if (cloudinaryUrl && cloudinaryPreset) {
+          imageUrl = await uploadToCloudinary(file, cloudinaryUrl, cloudinaryPreset);
+        }
+
+        response = await verifyWaveTopUp({
+          base64Image: base64,
+          mode,
+          allowedAmounts,
+          imageUrl,
+        });
+      }
 
       const data = response.data;
       setResult(data);
       setStatus('success');
       onSuccess?.(data);
     } catch (err) {
-      // Les erreurs HttpsError du callable arrivent avec un message lisible
-      // (ex: "Ce reçu Wave a déjà été utilisé.")
       console.error('[useWaveScan]', err);
-      setError(err.message || 'Erreur lors de la vérification du reçu.');
+      setError(err.message || 'Erreur lors du traitement de l\'opération.');
       setStatus('error');
     }
-  }, [mode, cloudinaryUrl, cloudinaryPreset, allowedAmounts, onSuccess]);
+  }, [mode, cloudinaryUrl, cloudinaryPreset, allowedAmounts, isContactSaved, onSuccess]);
 
   const reset = useCallback(() => {
     setStatus('idle');
@@ -115,5 +135,5 @@ export function useWaveScan({
     setError('');
   }, []);
 
-  return { scan, status, result, errorMsg, reset, isScanning: status === 'scanning' };
+  return { scan, status, result, errorMsg, reset, isScanning: status === 'scanning', saveAssistanceContact };
 }

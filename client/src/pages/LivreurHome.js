@@ -21,7 +21,8 @@ import "leaflet/dist/leaflet.css";
 import {
   Wallet, Power, ChevronRight, Loader2, Menu,
   ShoppingBag, Zap,
-  Phone, MapPin, AlertCircle, CheckCircle2, QrCode, ShieldCheck, Coins, KeyRound
+  Phone, MapPin, AlertCircle, CheckCircle2, QrCode, ShieldCheck, Coins, KeyRound,
+  X, UploadCloud, ArrowRight
 } from "lucide-react";
 
 import { functions } from "../firebase";
@@ -35,9 +36,11 @@ import imgSaloni from "../assets/saloni.png";
 import imgAntara from "../assets/antara.png";
 import imgMoto from "../assets/moto.png";
 import imgVtc from "../assets/vtc.png";
+import imgMoto2 from "../assets/driver-marker.png"; // (Ajustez le nom/chemin selon votre fichier)
 
 const VEHICLE_IMAGES = {
-  moto: imgMoto,
+  
+  moto: imgMoto2,
   saloni: imgSaloni,
   antara: imgAntara,
   vtc: imgVtc,
@@ -60,10 +63,14 @@ const getRotatedDriverIcon = (vehicleType, rotation = 0) => {
   const type = (vehicleType || "moto").toLowerCase().trim();
   let iconUrl = imgMoto;
   if (VEHICLE_IMAGES[type]) iconUrl = VEHICLE_IMAGES[type];
-
+  
   return L.divIcon({
-    html: `<div style="width:46px;height:46px;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 25px rgba(0,0,0,0.4);border:3px solid #10b981;transform:rotate(${rotation}deg);transition:transform 0.2s ease-out;"><img src="${iconUrl}" style="width:32px;height:32px;object-fit:contain"/></div>`,
-    iconSize: [46, 46], iconAnchor: [23, 23], className: "",
+    html: `<div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;transform:rotate(${rotation}deg);transition:transform 0.2s ease-out;">
+             <img src="${iconUrl}" style="width:100%;height:100%;object-fit:contain;filter:drop-shadow(0px 4px 6px rgba(0,0,0,0.3));"/>
+           </div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    className: "",
   });
 };
 
@@ -77,11 +84,9 @@ function MapController3D({ myPos, mission, setRoute, setDistance, setDuration, p
   const dropoffLng = mission?.dropoffLocation?.lng;
   const missionStatus = mission?.status;
 
-  // Suivi en direct du livreur sur la carte
   useEffect(() => {
     if (!myPos || !map || !map.getContainer()) return;
 
-    // S'il n'y a pas de mission en cours, la carte suit la position du livreur en temps réel
     if (!pickupLat || !pickupLng) {
       map.setView([myPos[0], myPos[1]], 16, { animate: true });
       return;
@@ -131,7 +136,7 @@ function MapController3D({ myPos, mission, setRoute, setDistance, setDuration, p
   return null;
 }
 
-export default function LivreurExterne() {
+export default function LivreurExterne({ onNavigateToUpload }) {
   const [courses, setCourses] = useState([]);
   const [livreurVehicle, setLivreurVehicle] = useState("moto");
   const [livreurName, setLivreurName] = useState("Chauffeur");
@@ -160,7 +165,6 @@ export default function LivreurExterne() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [pickupCodeInput, setPickupCodeInput] = useState("");
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
-  const [isContactSaved, setIsContactSaved] = useState(false);
 
   const audioRef = useRef(new Audio(ALERT_SOUND_URL));
   const lastUpdateRef = useRef(0);
@@ -177,10 +181,6 @@ export default function LivreurExterne() {
     mode: "pass",
     allowedAmounts: isExterne ? [1000, 2000] : [5000, 10000],
     onSuccess: (res) => {
-      if (!isContactSaved) {
-        showAlert("Veuillez d'abord enregistrer le contact assistance dans votre répertoire.", "error");
-        return;
-      }
       showAlert(`✅ Mode FREE ${res.hours >= 24 ? "24H" : "12H"} activé !`, "success");
       setShowPassModal(false);
     },
@@ -490,6 +490,15 @@ export default function LivreurExterne() {
     }
   };
 
+  const handleGoToUpload = () => {
+    setShowPassModal(false);
+    if (typeof onNavigateToUpload === "function") {
+      onNavigateToUpload();
+    } else {
+      window.location.href = "/upload-recu";
+    }
+  };
+
   if (navigationMode) return (
     <div className="relative w-full h-screen">
       {mission?.isCompteur && <div className="fixed top-12 left-4 z-[300]"><TaxiMeter missionId={mission.id} userRole="livreur" currentDistance={distanceKm}/></div>}
@@ -510,7 +519,9 @@ export default function LivreurExterne() {
       onTouchMove={handleDragMove} onMouseMove={handleDragMove}
       onMouseUp={() => setIsDragging(false)} onTouchEnd={() => setIsDragging(false)}>
 
-      {/* CARTE PLEIN ÉCRAN AMÉLIORÉE (DARK MODE) */}
+      <SideMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} userData={userData} />
+
+      {/* CARTE PLEIN ÉCRAN */}
       <div className="absolute inset-0 z-0 w-full h-full bg-slate-900">
         <MapContainer 
           center={myPos} 
@@ -532,12 +543,10 @@ export default function LivreurExterne() {
             vehicleRotation={vehicleRotation} 
           />
 
-          {/* AFFICHAGE SYSTÉMATIQUE DU LIVREUR SUR LA CARTE */}
           {myPos && (
             <Marker position={myPos} icon={getRotatedDriverIcon(livreurVehicle, vehicleRotation)} />
           )}
 
-          {/* ITINÉRAIRE & CLIENT (SI MISSION ACTIVE) */}
           {mission?.pickupLocation && (
             <>
               {routeCoords.length > 0 && <Polyline positions={routeCoords} color="#10b981" weight={6} opacity={0.9} />}
@@ -730,18 +739,115 @@ export default function LivreurExterne() {
             </div>
           ) : (
             <div className="py-8 space-y-3 text-center">
-              <div className="flex items-center justify-center w-12 h-12 mx-auto rounded-full bg-slate-100 text-slate-400">
-                <ShoppingBag size={20} />
+              <div className="inline-flex p-4 mb-2 rounded-full bg-slate-100 text-slate-400">
+                <ShoppingBag size={32} />
               </div>
-              <p className="text-xs font-bold text-slate-500">
-                {isOnline ? "En attente de nouvelles missions dans votre secteur..." : "Vous êtes actuellement hors ligne."}
+              <h4 className="text-sm font-black tracking-wider uppercase text-slate-700">Aucune mission en cours</h4>
+              <p className="max-w-xs mx-auto text-xs text-slate-500">
+                {isOnline 
+                  ? "Vous êtes en ligne. Restez à proximité des zones d'activité pour recevoir des demandes."
+                  : "Basculez en mode EN LIGNE pour recevoir des propositions de courses dans votre zone."}
               </p>
             </div>
           )}
         </div>
       </div>
 
-      <SideMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} userData={userData} />
+      {/* MODALE / PAGE D'INSTRUCTIONS PASS FREE */}
+      {showPassModal && (
+        <div className="fixed inset-0 z-[400] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-md p-6 space-y-5 duration-200 bg-white shadow-2xl rounded-3xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Zap className="text-indigo-600 fill-indigo-600" size={20} />
+                <h3 className="text-base font-black text-slate-900">INSTRUCTIONS - PASS FREE</h3>
+              </div>
+              <button onClick={() => setShowPassModal(false)} className="p-2 text-slate-400 hover:text-slate-600"><X size={20}/></button>
+            </div>
+
+            {/* GUIDE D'INSTRUCTIONS PAS À PAS */}
+            <div className="space-y-3">
+              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">1</span>
+                  <h4 className="text-xs font-black uppercase text-slate-900">Enregistrer le contact Assistance</h4>
+                </div>
+                <p className="text-[11px] text-slate-600 pl-7 leading-relaxed font-medium">
+                  Enregistrez notre numéro d'assistance afin de valider et confirmer votre reçu.
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">2</span>
+                  <h4 className="text-xs font-black uppercase text-slate-900">Effectuer le règlement Wave</h4>
+                </div>
+                <p className="text-[11px] text-slate-600 pl-7 leading-relaxed font-medium">
+                  Réalisez le paiement correspondant à votre forfait ({isExterne ? "1 000 F / 2 000 F" : "5 000 F / 10 000 F"}).
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">3</span>
+                  <h4 className="text-xs font-black uppercase text-slate-900">Transmettre le reçu complet</h4>
+                </div>
+                <p className="text-[11px] text-slate-600 pl-7 leading-relaxed font-medium">
+                  Envoyez la capture d'écran de l'interface Wave via notre page de dépôt dédiée pour activer votre pass.
+                </p>
+              </div>
+            </div>
+
+            {/* MESSAGE RAPPEL DE CONFORMITÉ */}
+            <div className="p-3 border bg-emerald-50 border-emerald-200/80 rounded-2xl">
+              <p className="text-[11px] font-bold text-emerald-900 leading-relaxed">
+                L'objectif est d'amener l'utilisateur à enregistrer le contact assistance pour confirmer son paiement par contrôle du reçu complet depuis l'interface Wave.
+              </p>
+            </div>
+
+            {/* BOUTON D'ACTION DE REDIRECTION */}
+            <div className="pt-1 space-y-2">
+              <button
+                onClick={handleGoToUpload}
+                className="flex items-center justify-center w-full gap-2 px-4 py-4 text-xs font-black tracking-wide text-white uppercase transition-all bg-indigo-600 shadow-xl hover:bg-indigo-700 rounded-2xl active:scale-95"
+              >
+                <UploadCloud size={18} />
+                <span>POURSUIVRE VERS RECHARGEMENT</span>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+
+            <button 
+              onClick={() => setShowPassModal(false)}
+              className="w-full py-2.5 text-xs font-black text-slate-400 hover:text-slate-600 uppercase transition-colors"
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODALE BADGE QR */}
+      {showBadgeModal && (
+        <div className="fixed inset-0 z-[400] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-sm p-6 space-y-4 text-center duration-200 bg-white shadow-2xl rounded-3xl animate-in fade-in zoom-in-95">
+            <div className="flex justify-end">
+              <button onClick={() => setShowBadgeModal(false)} className="p-1 text-slate-400 hover:text-slate-600"><X size={20}/></button>
+            </div>
+            <div className="flex items-center justify-center w-16 h-16 p-4 mx-auto rounded-full bg-emerald-50 text-emerald-600">
+              <QrCode size={32} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900">{livreurName}</h3>
+              <p className="mt-1 text-xs font-bold tracking-wider uppercase text-slate-500">{driverZoneName}</p>
+            </div>
+            <div className="p-4 font-mono text-xs break-all border bg-slate-50 rounded-2xl border-slate-100 text-slate-600">
+              ID: {auth.currentUser?.uid || "N/A"}
+            </div>
+            <p className="text-[10px] font-bold text-slate-400">Présentez ce badge lors des contrôles et passations de courses.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

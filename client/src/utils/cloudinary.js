@@ -1,6 +1,6 @@
 /**
- * Upload une image vers Cloudinary
- * @param {File} file - Le fichier image provenant d'un input file
+ * Upload une image ou une chaîne Data URI vers Cloudinary
+ * @param {File|Blob|string} file - Le fichier image ou la chaîne Data URI
  * @returns {Promise<string>} - L'URL sécurisée de l'image
  */
 export const uploadToCloudinary = async (file) => {
@@ -9,12 +9,19 @@ export const uploadToCloudinary = async (file) => {
     return null;
   }
   
-  // Lecture des variables via process.env, avec secours manuel si non définies
+  // Si c'est déjà une URL distante Cloudinary/Web, inutile de ré-uploader
+  if (typeof file === 'string' && file.startsWith('http')) {
+    return file;
+  }
+  
+  // Extraction du fichier si c'est un objet enveloppé (ex: { file: File })
+  const fileToUpload = file.file || file.raw || file;
+  
   const CLOUD_NAME = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME || "dh157ll3x";
   const UPLOAD_PRESET = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET || "mambo-images";
   
   const data = new FormData();
-  data.append("file", file);
+  data.append("file", fileToUpload);
   data.append("upload_preset", UPLOAD_PRESET);
   
   try {

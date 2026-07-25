@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
@@ -39,6 +38,7 @@ const CATEGORIES_MAP = {
   vehicule:        ['Berline','SUV / 4x4','Moto','Camion','Pick-up','Utilitaire'],
   autre:           ['Artisanat','Cosmétiques','Agriculture','Services','Autre'],
 };
+
 // eslint-disable-next-line no-unused-vars
 const STATUS_META = {
   en_preparation:       { label: "En préparation", color: "#b45309", bg: "#fef3c7", border: "#fde68a" },
@@ -89,15 +89,14 @@ export default function VendeurDashboard() {
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
   const prevOrderIds = React.useRef(new Set());
-  const [verificationCodes, setVerificationCodes] = useState({}); // { [orderId]: {pickupCode, deliveryCode} | null }
+  const [verificationCodes, setVerificationCodes] = useState({});
   const [regeneratingId, setRegeneratingId] = useState(null);
 
-  // Écouteur pour capter le préremplissage de boutique ou de coursier fini-rayons via l'URL
   useEffect(() => {
     if (!userProfile) return;
 
     const queryParams = new URLSearchParams(location.search);
-    const source = queryParams.get('source'); // ex: 'boutique' ou 'coursier_rayons'
+    const source = queryParams.get('source');
     
     if (source === 'boutique' || source === 'coursier_rayons') {
       const targetDestination = queryParams.get('adresse') || queryParams.get('targetDestination') || '';
@@ -107,7 +106,6 @@ export default function VendeurDashboard() {
 
       toast.info(`Pre-remplissage détecté (${source === 'boutique' ? 'Boutique' : 'Coursier rayons'})`);
 
-      // Redirection automatique vers le formulaire client-home avec l'état prérempli
       navigate("/client-home", {
         state: {
           isTiersOrder: true,
@@ -129,7 +127,6 @@ export default function VendeurDashboard() {
     }
   }, [location.search, userProfile, navigate]);
   
-  // Listener In-App Messages / Notifications
   useEffect(() => {
     if (!userProfile?.id) return;
 
@@ -144,13 +141,11 @@ export default function VendeurDashboard() {
         if (change.type === "added") {
           const msgData = change.doc.data();
           
-          // Notification visuelle à l'écran
           toast.info(`💬 ${msgData.title || "Nouveau message"} : ${msgData.body}`, {
             position: "top-center",
             autoClose: 5000,
           });
 
-          // Marquer automatiquement le message comme lu
           updateDoc(doc(db, "inAppMessages", change.doc.id), {
             status: "read",
             readAt: serverTimestamp()
@@ -164,40 +159,37 @@ export default function VendeurDashboard() {
     return () => unsubMessages();
   }, [userProfile?.id]);
 
-  // Listener Firebase Cloud Messaging (Notifications Hors-App / Push)
   useEffect(() => {
     if (!userProfile?.id) return;
 
     const requestPushPermission = async () => {
       try {
-        // Importation dynamique du module messaging de Firebase
+        if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+          return;
+        }
+
         const { getMessaging, getToken } = await import('firebase/messaging');
         const messaging = getMessaging();
         
-        // Demande d'autorisation au navigateur
         const permission = await Notification.requestPermission();
         
         if (permission === 'granted') {
-          // Récupération du jeton unique de l'appareil
-          // Remplace 'VOTRE_CLE_VAPID_PUBLIQUE' par ta clé Web Push générée dans la console Firebase
           const currentToken = await getToken(messaging, { 
             vapidKey: 'BDE5b26fkUCHbCy7IzjX30eDjJpfQev7GWOrKc6yJxUV48L0XInKEd2urQwzuqUgjQ5UAfP9EcvZ3gtXYI52oII' 
+          }).catch(err => {
+            console.warn('Erreur récupération jeton FCM :', err.message);
+            return null;
           });
           
           if (currentToken) {
-            // Sauvegarde ou mise à jour du jeton dans le profil du vendeur pour le serveur
             await updateDoc(doc(db, "users", userProfile.id), {
               fcmToken: currentToken,
               updatedAt: serverTimestamp()
             });
-          } else {
-            console.warn('Aucun jeton d\'enregistrement disponible. Demandez l\'autorisation de générer un jeton.');
           }
-        } else {
-          console.warn('Permission de notification refusée par l\'utilisateur.');
         }
       } catch (err) {
-        console.error('Erreur lors de la configuration des notifications Push FCM :', err);
+        console.warn('Configuration notifications Push désactivée ou échouée :', err.message);
       }
     };
 
@@ -535,18 +527,33 @@ function ProductModal({ user, product, onClose }) {
     try {
       const urls = [];
       for (let i = 0; i < images.length; i++) {
-        const img = images[i];
-        if (typeof img === 'string' && (img.startsWith('http') || img.startsWith('data:'))) {
-          urls.push(img);
+        const item = images[i];
+
+        // 1. Si c'est déjà une URL Web hébergée (ex: modification d'un produit existant)
+        if (typeof item === 'string' && item.startsWith('http')) {
+          urls.push(item);
           continue;
         }
-        if (img instanceof File || img instanceof Blob) {
-          const secureUrl = await uploadToCloudinary(img);
-          if (secureUrl) urls.push(secureUrl);
+
+        // 2. Extraction du fichier réel si encapsulé dans un objet
+        const fileTarget = (typeof item === 'object' && item !== null) 
+          ? (item.file || item.raw || item) 
+          : item;
+
+        // 3. Envoi vers Cloudinary
+        try {
+          const secureUrl = await uploadToCloudinary(fileTarget);
+          if (secureUrl) {
+            urls.push(secureUrl);
+          }
+        } catch (uploadErr) {
+          console.error("Échec upload image index", i, ":", uploadErr);
         }
       }
       
-      if (urls.length === 0) throw new Error("Impossible d'uploader les images.");
+      if (urls.length === 0) {
+        throw new Error("Impossible d'uploader les images. Veuillez vérifier votre connexion ou le format d'image.");
+      }
 
       const baseData = {
         nom:         f.nom || '',
@@ -578,7 +585,7 @@ function ProductModal({ user, product, onClose }) {
       setLoading(false); 
     }
   };
-
+  
   return (
     <div className="m-modal-fs fade-in">
       <div className="m-modal-header">

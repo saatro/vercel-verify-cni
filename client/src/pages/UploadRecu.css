@@ -210,3 +210,10 @@ button:disabled, a.ur-wave-btn-timeline[disabled] {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Masque tout bouton flottant ou fixe lié à WhatsApp sur cette page */
+.ur-root .floating-whatsapp,
+.ur-root [class*="whatsapp-float"],
+.ur-root [class*="btn-whatsapp-floating"] {
+  display: none !important;
+}

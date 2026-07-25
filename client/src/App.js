@@ -72,7 +72,7 @@ export default function App() {
   const location = useLocation();
 
   const isAssignPage   = location.pathname.includes('/assignation-') || location.pathname.includes('/cart-course/');
-  const isUploadPage   = location.pathname.includes('/upload-recu');
+ 
   const isCoursierPage = location.pathname.includes('/espace-coursier');
   const isTrackingPage = location.pathname.includes('/tracking');
 
@@ -223,7 +223,7 @@ export default function App() {
         />
 
         {/* Bouton d'assistance fixe */}
-        {(isAssignPage || isUploadPage || isCoursierPage || isTrackingPage) && role !== "admin" && (
+        {(isAssignPage || isCoursierPage || isTrackingPage) && role !== "admin" && (
           <button 
             onClick={() => contactAssistance()} 
             className="fixed bottom-32 right-6 z-[2000] bg-emerald-600 hover:bg-emerald-500 text-white p-4 rounded-full shadow-xl shadow-emerald-900/10 transform hover:scale-110 active:scale-95 transition-all duration-300 flex items-center justify-center group"
