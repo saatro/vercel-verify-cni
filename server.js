@@ -1,5 +1,7 @@
 import dotenv from "dotenv";
 import path from "path";
+import fs from "fs";
+import "dotenv/config";
 
 // Charger les variables .env immédiatement
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
@@ -10,9 +12,32 @@ import makeWASocket, {
   fetchLatestWaWebVersion,
   useMultiFileAuthState
 } from "@whiskeysockets/baileys";
+import express from "express";
 import admin from "firebase-admin";
 import pino from "pino";
-import QRCode from "qrcode-terminal";
+
+// ═══════════════════════════════════════════════════════════════════
+// SERVEUR EXPRESS POUR BINDING DU PORT RENDER (HEALTHCHECK)
+// ═══════════════════════════════════════════════════════════════════
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+app.use(express.json());
+
+app.get("/", (req, res) => {
+  res.status(200).send("🤖 Bot WhatsApp & Service de Recharge Mambo opérationnel !");
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "OK", timestamp: new Date().toISOString() });
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Serveur HTTP démarré sur le port ${PORT}`);
+  setTimeout(() => {
+    connectToWhatsApp();
+  }, 3000);
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // INITIALISATION FIREBASE ADMIN & CONSTANTES
@@ -21,7 +46,6 @@ const projectId = process.env.FIREBASE_PROJECT_ID;
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 const rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-// Marchand dédié exclusivement aux recharges livreurs
 const LEGACY_MERCHANT_NAME = process.env.LEGACY_MERCHANT_NAME || "LEGACY";
 
 if (!projectId || !clientEmail || !rawPrivateKey) {
@@ -82,7 +106,6 @@ function getPhoneVariants(from) {
   const digits = String(from).replace(/[^0-9]/g, "");
   if (!digits) return [];
 
-  // Si c'est un code de passation à 6 chiffres, on le retourne directement sans transformation téléphone
   if (digits.length === 6) {
     return [digits];
   }
@@ -103,13 +126,13 @@ function getPhoneVariants(from) {
 
   return Array.from(
     new Set([
-      withZero,                   // ex: 0602179075
-      baseWithoutZero,            // ex: 602179075
-      `225${withZero}`,           // ex: 2250602179075
-      `225${baseWithoutZero}`,     // ex: 225602179075
-      `+225${withZero}`,          // ex: +2250602179075
-      `+225${baseWithoutZero}`,    // ex: +225602179075
-      digits                      // valeur brute
+      withZero,
+      baseWithoutZero,
+      `225${withZero}`,
+      `225${baseWithoutZero}`,
+      `+225${withZero}`,
+      `+225${baseWithoutZero}`,
+      digits
     ])
   );
 }
@@ -142,31 +165,24 @@ async function callOCRSpaceVerification({ apiKey, base64Image, merchantAttendu, 
 
   const rawText = ocrResult.ParsedResults[0].ParsedText || "";
 
-  // ── EXTRACTION REGEX ──
-  // 1. Détection du Reçu complet officiel
   const isWaveReceipt = /Reçu\s*de\s*Transaction/i.test(rawText) || /Wave/i.test(rawText);
   const hasApercuAndDetails = /Aperçu/i.test(rawText) && /Détails/i.test(rawText);
 
-  // 2. ID de Transaction (Format Wave : T_ suivi de lettres/chiffres)
   const txMatch = rawText.match(/T_[A-Z0-9]+/i);
   const transactionId = txMatch ? txMatch[0].trim() : "";
 
-  // 3. Montant (Recherche d'un nombre suivi de F ou FCFA)
   const amountMatch = rawText.match(/(\d[\d\s]*)\s*F(?:CFA)?/i);
   let detectedAmount = 0;
   if (amountMatch) {
     detectedAmount = parseInt(amountMatch[1].replace(/\s+/g, ""), 10);
   }
 
-  // 4. Numéro de téléphone du payeur (Tranches à 10 chiffres : 06, 01, 05, 07, 08, 09)
   const phoneMatch = rawText.match(/(?:\+?225\s*)?(0[156789](?:\s*\d){8})/i);
   const buyerPhone = phoneMatch ? sanitizePhoneNumber(phoneMatch[0]) : "";
 
-  // 5. Code de passation (6 chiffres)
   const passationMatch = rawText.match(/\b\d{6}\b/);
   const codePassation = passationMatch ? passationMatch[0] : "";
 
-  // 6. Statut et Marchand
   const isStatusCompleted = /Effectué/i.test(rawText) || /Succès/i.test(rawText) || /Payé/i.test(rawText);
   
   const cleanRawText = rawText.toLowerCase().replace(/\s+/g, "");
@@ -179,7 +195,8 @@ async function callOCRSpaceVerification({ apiKey, base64Image, merchantAttendu, 
     transactionId &&
     detectedAmount > 0 &&
     isWaveReceipt &&
-    isStatusCompleted
+    isStatusCompleted &&
+    isMerchantCorrect
   );
 
   return {
@@ -237,8 +254,15 @@ async function creditSoldeLivreurAtomique({ userId, amount, transactionId, userN
 // ═══════════════════════════════════════════════════════════════════
 // INITIALISATION CLIENT WHATSAPP (BAILEYS)
 // ═══════════════════════════════════════════════════════════════════
+let isPairingRequested = false;
+
 async function connectToWhatsApp() {
-  const { state, saveCreds } = await useMultiFileAuthState(".baileys_auth");
+  // Format strict du téléphone sans '+' ni espaces pour Baileys
+  const rawAssistance = process.env.ASSISTANCE_PHONE || "2250778073456";
+  const ASSISTANCE_PHONE = rawAssistance.replace(/[^0-9]/g, "");
+
+  const authFolder = ".baileys_auth";
+  const { state, saveCreds } = await useMultiFileAuthState(authFolder);
   const { version } = await fetchLatestWaWebVersion();
 
   const sock = makeWASocket({
@@ -246,26 +270,52 @@ async function connectToWhatsApp() {
     auth: state,
     logger: pino({ level: "silent" }),
     printQRInTerminal: false,
+    connectTimeoutMs: 60000,
+    defaultQueryTimeoutMs: 60000,
+    keepAliveIntervalMs: 10000,
   });
 
   sock.ev.on("creds.update", saveCreds);
 
-  sock.ev.on("connection.update", (update) => {
+  sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
-    if (qr) {
-      console.log("⚡ Scan ce QR Code avec WhatsApp :");
-      QRCode.generate(qr, { small: true });
+    // Demande du Pairing Code UNIQUEMENT lorsqu'un QR Code est généré (preuve que le socket est prêt)
+    if (qr && !sock.authState.creds.registered && !isPairingRequested) {
+      isPairingRequested = true;
+      try {
+        console.log(`📱 Demande du code pour le numéro : ${ASSISTANCE_PHONE}`);
+        const code = await sock.requestPairingCode(ASSISTANCE_PHONE);
+        console.log(`\n════════════════════════════════════════════`);
+        console.log(`🔑 CODE D'APPAIRAGE WHATSAPP : ${code}`);
+        console.log(`════════════════════════════════════════════\n`);
+      } catch (err) {
+        console.error("❌ Erreur génération Pairing Code :", err?.message || err);
+        isPairingRequested = false;
+      }
     }
 
     if (connection === "close") {
-      const shouldReconnect =
-        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      console.log("❌ Connexion fermée. Reconnexion automatique :", shouldReconnect);
-      if (shouldReconnect) {
-        connectToWhatsApp();
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
+
+      console.log(`❌ Connexion fermée (Code: ${statusCode}). Reconnexion : ${!isLoggedOut}`);
+
+      isPairingRequested = false;
+
+      if (isLoggedOut) {
+        console.log("🧹 Nettoyage de la session corrompue...");
+        try {
+          fs.rmSync(authFolder, { recursive: true, force: true });
+        } catch (e) {
+          console.error("Erreur nettoyage dossier auth :", e);
+        }
+        setTimeout(() => connectToWhatsApp(), 5000);
+      } else {
+        setTimeout(() => connectToWhatsApp(), 5000);
       }
     } else if (connection === "open") {
+      isPairingRequested = false;
       console.log("✅ Client WhatsApp (Baileys) connecté et prêt !");
     }
   });
@@ -283,7 +333,6 @@ async function connectToWhatsApp() {
 
       if (!remoteJid || remoteJid === "status@broadcast" || remoteJid.endsWith("@g.us")) continue;
 
-      // Détection de l'expéditeur réel (gestion des JID LID)
       const participantJid = msg.key.participant || remoteJid;
       const rawJid = participantJid.split("@")[0];
       const rawSenderNumber = rawJid.includes(":") ? rawJid.split(":")[0] : rawJid;
@@ -342,7 +391,6 @@ async function connectToWhatsApp() {
 
       console.log(`📩 Reçu reçu de WhatsApp - Analyse par OCR.space API en cours...`);
       try {
-        // 1. Analyser l'image avec OCR.space + Regex
         const dataIA = await callOCRSpaceVerification({
           apiKey: process.env.OCR_SPACE_API_KEY,
           base64Image,
@@ -357,7 +405,6 @@ async function connectToWhatsApp() {
           continue;
         }
 
-        // 2. RECHERCHE ET VÉRIFICATION DE SÉCURITÉ DU LIVREUR
         let targetPhoneSearch = rawSenderNumber;
         const isLid = rawSenderNumber.length > 12 && !rawSenderNumber.startsWith("225");
 
@@ -373,7 +420,6 @@ async function connectToWhatsApp() {
           .limit(1)
           .get();
 
-        // Si recherche infructueuse et code de passation à 6 chiffres présent
         if (senderSnap.empty && dataIA.codePassation) {
           senderSnap = await db
             .collection("users")
@@ -382,7 +428,6 @@ async function connectToWhatsApp() {
             .get();
         }
 
-        // Fallback : Recherche par UID
         if (senderSnap.empty) {
           for (const variant of phoneVariants) {
             const userDocById = await db.collection("users").doc(variant).get();
@@ -413,7 +458,6 @@ async function connectToWhatsApp() {
           continue;
         }
 
-        // 3. VÉRIFICATION STRICTE DE CORRESPONDANCE (Par numéro de téléphone OU par code de passation à 6 chiffres)
         let isVerified = false;
 
         if (dataIA.buyerPhone && dataIA.buyerPhone.trim() !== "") {
@@ -459,5 +503,3 @@ async function connectToWhatsApp() {
     }
   });
 }
-
-connectToWhatsApp();
