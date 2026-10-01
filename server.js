@@ -4,11 +4,11 @@ import makeWASocket, {
   fetchLatestWaWebVersion,
   useMultiFileAuthState,
 } from "@whiskeysockets/baileys";
+import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import admin from "firebase-admin";
-import cors from "cors";
 import fs from "fs";
 import path from "path";
 import pino from "pino";
@@ -68,7 +68,8 @@ app.get("/health", (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// POST /api/verify-cni — Vérification CNI / Pièce d'identité
+// ═══════════════════════════════════════════════════════════════════
+// POST /api/verify-cni — Placez la route ICI, AVANT app.listen
 // ═══════════════════════════════════════════════════════════════════
 const CNI_MATCH_THRESHOLD = 0.55;
 
@@ -114,6 +115,9 @@ app.post("/api/verify-cni", async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// DÉMARRAGE DU SERVEUR (Toujours après la définition des routes)
+// ═══════════════════════════════════════════════════════════════════
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Serveur HTTP démarré sur le port ${PORT}`);
   setTimeout(() => {
@@ -157,7 +161,7 @@ function cleanPrivateKey(key) {
   if (!formattedKey.includes("-----BEGIN PRIVATE KEY-----") && /^[A-Za-z0-9+/=]+$/.test(formattedKey)) {
     try {
       formattedKey = Buffer.from(formattedKey, 'base64').toString('utf8');
-    } catch (e) {}
+    } catch (e) { }
   }
 
   formattedKey = formattedKey
@@ -417,24 +421,25 @@ ou passeport). Réponds UNIQUEMENT avec un objet JSON strictly valide, sans text
 "expiry": "date d'expiration au format lu ou chaîne vide", "isIdDocument": true|false}.
 Si l'image n'est pas une pièce d'identité lisible, mets "isIdDocument": false et les autres champs à "".`;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: "image/jpeg", data: imageBase64 } },
-            ],
-          },
-        ],
-        generationConfig: { temperature: 0 },
-      }),
-    }
-  );
+  // ✅ CODE CORRIGÉ (Modèle à jour)
+const response = await fetch(
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            { inline_data: { mime_type: "image/jpeg", data: imageBase64 } },
+          ],
+        },
+      ],
+      generationConfig: { temperature: 0 },
+    }),
+  }
+);
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "");
@@ -834,7 +839,7 @@ async function resolveCommissionRecipients(data) {
           );
         }
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   if (!clientUserId && clientPhone) {
@@ -848,7 +853,7 @@ async function resolveCommissionRecipients(data) {
           .get();
         if (!snap.empty) clientUserId = snap.docs[0].id;
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   return {
@@ -926,7 +931,7 @@ async function notifyClientPayCommission(sock, { courseRef, data, source }) {
           );
         }
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   let waveDisplay = "";
@@ -961,7 +966,7 @@ async function notifyClientPayCommission(sock, { courseRef, data, source }) {
             waveRawForLink;
         }
       }
-    } catch (_) {}
+    } catch (_) { }
 
     const payQs = new URLSearchParams();
     if (linkedOrderId) payQs.set("orderId", linkedOrderId);
@@ -1536,7 +1541,7 @@ async function connectToWhatsApp() {
                       orderId: linkedOrderId,
                     });
                   }
-                } catch (_) {}
+                } catch (_) { }
               }
 
               await safeSendMessage(sock, remoteJid, {
@@ -1976,7 +1981,7 @@ async function connectToWhatsApp() {
                       orderId,
                     });
                   }
-                } catch (_) {}
+                } catch (_) { }
               }
 
               if (assignedCoursierId) {
@@ -2007,7 +2012,7 @@ async function connectToWhatsApp() {
                       orderId,
                     });
                   }
-                } catch (_) {}
+                } catch (_) { }
               }
             } else {
               await processClientSupermarketPaymentAtomique({
@@ -2062,7 +2067,7 @@ async function connectToWhatsApp() {
                       orderId,
                     });
                   }
-                } catch (_) {}
+                } catch (_) { }
               }
             }
           }
