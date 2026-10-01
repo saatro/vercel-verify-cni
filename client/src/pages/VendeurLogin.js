@@ -6,12 +6,12 @@ import {
   signInWithPopup, 
   signOut 
 } from "firebase/auth";
-import { doc, getDoc, collection, query, where, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import { Store, ArrowLeft, Smartphone, Lock, RefreshCcw } from "lucide-react";
 import MamboLock from "../components/MamboLock"; 
-import { cleanPhone, buildEmail, generatePatternPassword } from "../mamboUtils";
+import { cleanPhone, generatePatternPassword } from "../mamboUtils";
 import "react-toastify/dist/ReactToastify.css";
 import "./VendeurAuth.css";
 
@@ -52,40 +52,45 @@ export default function VendeurLogin() {
     setLoading(true);
 
     try {
-      // 1. Recherche du vendeur dans Firestore par son numéro de téléphone
-      const usersRef = collection(db, "users");
-      const q = query(usersRef, where("telephone", "==", cleanTelephone), where("role", "==", "vendeur"));
-      const querySnapshot = await getDocs(q);
-
-      if (querySnapshot.empty) {
-        toast.info("Compte inexistant. Redirection vers la création de boutique...");
-        setTimeout(() => {
-          navigate("/vendeur-signup", { state: { initialPhone: cleanTelephone } });
-        }, 1500);
-        return;
-      }
-
-      // Récupération des données Firestore existantes
-      const existingUserDoc = querySnapshot.docs[0];
-      const existingUserData = existingUserDoc.data();
-
-      // 2. Génération des identifiants techniques basés STRICTEMENT sur les données du document trouvé
-      const technicalEmail = existingUserData.email || buildEmail("", cleanTelephone, "vendeur");
+      // L'email technique est déterministe (même convention que la création
+      // de compte dans VendeurSignup) : pas besoin de lire Firestore avant
+      // la connexion. Une lecture Firestore ICI échouerait de toute façon
+      // avec "Missing or insufficient permissions", car les règles exigent
+      // request.auth != null pour lire /users — et on n'est pas encore
+      // authentifié à ce stade.
+      const technicalEmail = `${cleanTelephone}@livraison-moto.firebaseapp.com`;
       const technicalPassword = generatePatternPassword(pattern, cleanTelephone);
 
-      // 3. Authentification Firebase Auth et Redirection immédiate pour éviter les conflits d'écouteurs de snapshots
       try {
         const userCredential = await signInWithEmailAndPassword(auth, technicalEmail, technicalPassword);
-        
-        // Validation immédiate du rôle suite à la connexion par schéma
+
+        // Cette lecture-ci est autorisée : on est maintenant authentifié.
         const validProfile = await verifyVendeurRole(userCredential.user);
-        if (validProfile) {
-          toast.success(`Bienvenue ${validProfile.nomBoutique || validProfile.nomComplet || 'dans votre boutique'} !`);
-          navigate("/vendeur-dashboard");
+        if (!validProfile) {
+          await signOut(auth);
+          toast.error("Profil boutique introuvable pour ce compte. Contactez le support.");
+          return;
         }
+
+      //  toast.success(`Bienvenue ${validProfile.nomBoutique || validProfile.nomComplet || 'dans votre boutique'} !`);
+        navigate("/vendeur-dashboard");
       } catch (authError) {
         console.error("Erreur Auth:", authError.code);
-        throw new Error("Schéma de sécurité incorrect pour ce numéro.");
+
+        if (authError.code === "auth/user-not-found") {
+          toast.info("Compte inexistant. Redirection vers la création de boutique...");
+          setTimeout(() => {
+            navigate("/vendeur-signup", { state: { initialPhone: cleanTelephone } });
+          }, 1500);
+          return;
+        }
+        if (authError.code === "auth/wrong-password" || authError.code === "auth/invalid-credential") {
+          throw new Error("Schéma de sécurité incorrect pour ce numéro.");
+        }
+        if (authError.code === "auth/too-many-requests") {
+          throw new Error("Trop de tentatives. Réessayez dans quelques minutes.");
+        }
+        throw new Error("Échec de connexion. Vérifiez votre connexion internet et réessayez.");
       }
 
     } catch (error) {

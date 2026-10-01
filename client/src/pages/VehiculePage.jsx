@@ -1,183 +1,200 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, Info, MapPin, Car, Gauge, Calendar, Phone, ShoppingCart } from "lucide-react";
-import { toast, ToastContainer } from "react-toastify";
+import { ArrowLeft, Search, Info, Car } from "lucide-react";
+import "./SupermarketPage.css";
+
+function getSpecs(p) {
+  const s = p.detailsSpecifiques || {};
+  return {
+    annee: s.modele_annee || p.annee || p.modele_annee || "",
+    transmission: s.boite || p.transmission || p.boite || "",
+    energie: s.energie || p.energie || "",
+    km: s.kilometrage || p.kilometrage || "",
+    marque: s.marque_auto || p.marque || "",
+    etat: s.etat_auto || p.etat || "",
+  };
+}
 
 export default function VehiculePage() {
   const navigate = useNavigate();
-  
-  const [vehicles, setVehicles] = useState([]);
-  const [dealers, setDealers] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [vendorsMap, setVendorsMap] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Récupération des Concessionnaires / Vendeurs de véhicules
-    const vQuery = query(
-      collection(db, "vendors"), 
-      where("enseigne", "==", "Véhicule")
+    const q = query(collection(db, "products"), where("type", "==", "vehicule"));
+    const unsub = onSnapshot(
+      q,
+      async (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setProducts(list);
+
+        const ids = [...new Set(list.map((p) => p.vendorId || p.vendeurId).filter(Boolean))];
+        const map = {};
+        await Promise.all(
+          ids.map(async (vid) => {
+            try {
+              let s = await getDoc(doc(db, "users", vid));
+              if (!s.exists()) s = await getDoc(doc(db, "vendors", vid));
+              if (s.exists()) map[vid] = { id: s.id, ...s.data() };
+            } catch (_) {}
+          })
+        );
+        setVendorsMap(map);
+        setLoading(false);
+      },
+      () => setLoading(false)
     );
-    
-    const unsubscribeDealers = onSnapshot(vQuery, (vSnapshot) => {
-      const dealerList = vSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setDealers(dealerList);
-
-      // 2. Récupération des Véhicules (Voitures, Motos, etc.)
-      const pQuery = query(
-        collection(db, "products"), 
-        where("type", "==", "vehicule") 
-      );
-
-      const unsubscribeProducts = onSnapshot(pQuery, (pSnapshot) => {
-        const productList = pSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setVehicles(productList);
-        setLoading(false);
-      }, (err) => {
-        console.error("Erreur produits véhicules:", err);
-        setLoading(false);
-      });
-
-      return () => unsubscribeProducts();
-    }, (err) => {
-      console.error("Erreur vendeurs véhicules:", err);
-      setLoading(false);
-    });
-
-    return () => unsubscribeDealers();
+    return () => unsub();
   }, []);
 
-  // Filtrage par nom de véhicule, marque ou nom du vendeur
-  const filteredVehicles = useMemo(() => {
+  const byVendor = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
-    if (!term) return vehicles;
-    return vehicles.filter(v => 
-      v.nom?.toLowerCase().includes(term) || 
-      v.marque?.toLowerCase().includes(term) ||
-      v.nomBoutique?.toLowerCase().includes(term)
-    );
-  }, [vehicles, searchTerm]);
-
-  const contactVendor = (e, phone, vehicleName) => {
-    e.stopPropagation();
-    const message = `Bonjour, je suis intéressé par votre véhicule : ${vehicleName}. Est-il toujours disponible ?`;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
-  };
+    const filtered = products.filter((p) => {
+      if (!term) return true;
+      const sp = getSpecs(p);
+      return (
+        p.nom?.toLowerCase().includes(term) ||
+        sp.marque?.toLowerCase().includes(term) ||
+        sp.annee?.toLowerCase().includes(term) ||
+        p.nomBoutique?.toLowerCase().includes(term)
+      );
+    });
+    const map = {};
+    filtered.forEach((p) => {
+      const vid = p.vendorId || p.vendeurId || "_";
+      if (!map[vid]) map[vid] = [];
+      map[vid].push(p);
+    });
+    return Object.entries(map);
+  }, [products, searchTerm]);
 
   return (
-    <div className="v-page-container">
-      <ToastContainer position="bottom-right" />
-      
-      <header className="v-main-header">
-        <div className="v-nav-row">
-          <button onClick={() => navigate(-1)} className="v-icon-btn"><ArrowLeft size={22} /></button>
-          <div className="v-header-title">
-            <h1>Véhicules</h1>
-            <p>{vehicles.length} annonces en ligne</p>
-          </div>
-          <button onClick={() => navigate('/cart')} className="v-icon-btn">
-            <ShoppingCart size={20} />
+    <div className="light-market">
+      <header className="light-header" style={{ background: "#fff", borderBottom: "1px solid #eee" }}>
+        <div className="header-main">
+          <button type="button" onClick={() => navigate(-1)} className="btn-back">
+            <ArrowLeft size={24} />
           </button>
+          <h1>Véhicules</h1>
+          <div className="header-cart" onClick={() => navigate("/marketplace")}>
+            <Car size={22} color="#f59e0b" />
+          </div>
         </div>
-        
-        <div className="v-search-bar">
-          <Search size={18} className="v-search-icon" />
-          <input 
-            type="text" 
-            placeholder="Marque, modèle (ex: Toyota, Range...)" 
+        <div className="search-bar-light">
+          <Search size={18} />
+          <input
+            type="text"
+            placeholder="Toyota, Mercedes, Rav4..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-
-        <div className="v-wave-info">
-          <div className="v-info-circle"><Info size={12} /></div>
-          <p>Paiement <strong>Wave</strong> : Enregistrez le contact assistance pour valider votre reçu.</p>
+        <div className="assistance-notice" style={{ background: "#fef3c7", color: "#92400e" }}>
+          <Info size={14} />
+          <span>Payez un acompte via Wave pour réserver, ou contactez l'assistance.</span>
         </div>
       </header>
 
-      <main className="v-list-content">
+      <main className="light-content">
         {loading ? (
-          <div className="v-state-msg">Chargement du parc automobile...</div>
-        ) : filteredVehicles.length > 0 ? (
-          <div className="v-auto-grid">
-            {filteredVehicles.map(veh => (
-              <div key={veh.id} className="v-auto-card" onClick={() => navigate(`/product/${veh.id}`)}>
-                <div className="v-img-wrapper">
-                  <img src={veh.image || veh.images?.[0] || "/placeholder.png"} alt={veh.nom} />
-                  <div className="v-price-badge">{veh.prix?.toLocaleString()} F</div>
+          <div className="no-data">Chargement des showrooms...</div>
+        ) : byVendor.length === 0 ? (
+          <div className="no-data">Aucun véhicule disponible.</div>
+        ) : (
+          byVendor.map(([vid, items]) => {
+            const v = vendorsMap[vid] || {};
+            const name =
+              v.nomBoutique || v.enseigne || v.nomComplet || items[0]?.nomBoutique || "Concessionnaire";
+            const logo = v.photoURL || v.logo || items[0]?.logoBoutique;
+            return (
+              <div key={vid} className="shelf-section">
+                <div className="shelf-top">
+                  <div className="vendor-brand" onClick={() => navigate(`/store/${vid}`)}>
+                    <img
+                      src={logo || "https://placehold.co/80x80/f59e0b/ffffff/png?text=Auto"}
+                      alt={name}
+                      className="brand-img"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = "https://placehold.co/80x80/f59e0b/ffffff/png?text=Auto";
+                      }}
+                    />
+                    <div className="brand-info">
+                      <h3>{name}</h3>
+                      <span className="location-info">Concessionnaire / Particulier</span>
+                    </div>
+                  </div>
                 </div>
-                
-                <div className="v-card-details">
-                  <div className="v-vendor-tag">
-                    <img src={veh.logoBoutique || "/placeholder.png"} alt="" />
-                    <span>{veh.nomBoutique}</span>
-                  </div>
-                  
-                  <h3 className="v-car-name">{veh.marque} {veh.nom}</h3>
-                  
-                  <div className="v-car-specs">
-                    <div className="v-spec-item"><Calendar size={14} /> <span>{veh.reference || "N/A"}</span></div>
-                    <div className="v-spec-item"><Gauge size={14} /> <span>{veh.poidsVolume || "Essence"}</span></div>
-                    <div className="v-spec-item"><MapPin size={14} /> <span>{veh.adresse || "Abidjan"}</span></div>
-                  </div>
 
-                  <div className="v-action-row">
-                    <button className="v-btn-call" onClick={(e) => contactVendor(e, veh.telephone || "0500185364", veh.nom)}>
-                      <Phone size={14} /> WhatsApp
-                    </button>
-                    <button className="v-btn-details">Voir plus</button>
-                  </div>
+                <div className="horizontal-scroll-light">
+                  {items.map((p) => {
+                    const sp = getSpecs(p);
+                    return (
+                      <div
+                        key={p.id}
+                        className="light-product-card"
+                        onClick={() => navigate(`/product/${p.id}`)}
+                      >
+                        <div className="p-img-box">
+                          <img
+                            src={
+                              p.images?.[0] ||
+                              p.imageUrl ||
+                              p.image ||
+                              "https://placehold.co/200x200/fef3c7/92400e/png?text=Auto"
+                            }
+                            alt={p.nom}
+                          />
+                          {(sp.annee || sp.marque) && (
+                            <div
+                              style={{
+                                position: "absolute",
+                                bottom: 5,
+                                left: 5,
+                                background: "#f59e0b",
+                                color: "white",
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                                fontSize: "0.6rem",
+                                fontWeight: "bold",
+                              }}
+                            >
+                              {sp.annee || sp.marque}
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-info">
+                          <p className="p-price-light" style={{ color: "#1e293b" }}>
+                            {Number(p.prix || 0).toLocaleString()} FCFA
+                          </p>
+                          <p className="p-name-light">{p.nom}</p>
+                          <p style={{ fontSize: "0.65rem", color: "#64748b" }}>
+                            {[sp.transmission, sp.energie, sp.km ? `${sp.km} km` : ""]
+                              .filter(Boolean)
+                              .join(" · ") || "—"}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="v-state-msg">
-            <Car size={48} opacity={0.1} />
-            <p>Aucun véhicule trouvé pour cette recherche.</p>
-          </div>
+            );
+          })
         )}
       </main>
 
       <style>{`
-        .v-page-container { background: #f0f2f5; min-height: 100vh; font-family: 'Segoe UI', Roboto, sans-serif; }
-        .v-main-header { background: #fff; padding: 15px; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .v-nav-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
-        .v-header-title h1 { font-size: 1.2rem; font-weight: 800; color: #1c1e21; margin: 0; }
-        .v-header-title p { font-size: 0.75rem; color: #65676b; margin: 0; }
-        .v-icon-btn { background: #f0f2f5; border: none; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: #1c1e21; }
-        
-        .v-search-bar { background: #f0f2f5; border-radius: 20px; display: flex; align-items: center; padding: 10px 15px; gap: 10px; }
-        .v-search-bar input { background: transparent; border: none; font-size: 0.9rem; width: 100%; outline: none; }
-        .v-search-icon { color: #8a8d91; }
-        
-        .v-wave-info { display: flex; align-items: center; gap: 10px; background: #6d28d9; color: #fff; padding: 10px 15px; border-radius: 12px; margin-top: 15px; font-size: 0.75rem; line-height: 1.3; }
-        .v-info-circle { background: rgba(255,255,255,0.2); border-radius: 50%; width: 18px; height: 18px; min-width: 18px; display: flex; align-items: center; justify-content: center; }
-        
-        .v-list-content { padding: 15px; }
-        .v-auto-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
-        
-        .v-auto-card { background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.04); }
-        .v-img-wrapper { position: relative; width: 100%; height: 200px; }
-        .v-img-wrapper img { width: 100%; height: 100%; object-fit: cover; }
-        .v-price-badge { position: absolute; top: 15px; right: 15px; background: #fff; color: #1c1e21; padding: 5px 12px; border-radius: 20px; font-weight: 800; font-size: 0.9rem; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        
-        .v-card-details { padding: 15px; }
-        .v-vendor-tag { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-        .v-vendor-tag img { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; }
-        .v-vendor-tag span { font-size: 0.7rem; font-weight: 600; color: #65676b; text-transform: uppercase; }
-        
-        .v-car-name { font-size: 1.1rem; font-weight: 700; color: #1c1e21; margin: 0 0 10px 0; }
-        .v-car-specs { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 15px; border-top: 1px solid #f0f2f5; padding-top: 12px; }
-        .v-spec-item { display: flex; align-items: center; gap: 5px; color: #65676b; font-size: 0.75rem; }
-        
-        .v-action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .v-btn-call { background: #25d366; color: #fff; border: none; padding: 10px; border-radius: 10px; font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; gap: 6px; }
-        .v-btn-details { background: #f0f2f5; color: #1c1e21; border: none; padding: 10px; border-radius: 10px; font-weight: 700; font-size: 0.8rem; }
-
-        .v-state-msg { text-align: center; padding: 80px 20px; color: #8a8d91; }
+        .assistance-notice {
+          display: flex; align-items: center; gap: 8px;
+          padding: 8px 16px; margin: 10px 16px;
+          border-radius: 8px; font-size: 0.7rem; font-weight: 600;
+        }
+        .location-info { font-size: 0.7rem; color: #667085; display: block; }
       `}</style>
     </div>
   );

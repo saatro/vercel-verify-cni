@@ -6,7 +6,7 @@
   transform: translateY(-50%);
   width: 24px; /* Un peu plus large pour l'attraper facilement */
   height: 90px;
-  background: rgba(61, 2, 128, 0.4); /* Teinte verte pour rappeler le livreur */
+  background: rgba(78, 78, 79, 0.4); /* Teinte verte pour rappeler le livreur */
   backdrop-filter: blur(10px);
   border-radius: 0 16px 16px 0;
   box-shadow: 2px 4px 15px rgba(0,0,0,0.15);
@@ -35,13 +35,13 @@
 .edge-panel {
   position: fixed;
   top: 50%;
-  left: 15px;
+  left: 8px;
   transform: translateY(-50%);
   width: 115px; /* Largeur augmentée pour le confort */
-  background: rgba(255, 255, 255, 0.3);
-  backdrop-filter: blur(20px) saturate(160%);
+  background: rgba(219, 217, 217, 0.124);
+  backdrop-filter: blur(5px) saturate(30%);
   padding: 3px 8px; /* Padding plus généreux */
-  border-radius: 28px;
+  border-radius: 21px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
   z-index: 99999;
   border: 1px solid rgba(255, 255, 255, 0.3);
@@ -59,18 +59,18 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(222, 222, 222, 0.161);
   margin-bottom: 8px; /* Plus d'espace entre les boutons */
   padding: 3px 5px; /* Padding intérieur augmenté */
-  border-radius: 22px;
+  border-radius: 17px;
   cursor: pointer;
   transition: all 0.2s ease;
   text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
 .edge-option:hover {
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.7);
   transform: translateY(-3px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
@@ -78,7 +78,7 @@
 /* Icônes */
 .edge-option svg {
   font-size: 25px;
-  color: hsl(266, 98%, 50%); /* Vert thématique */
+  color: hsla(0, 0%, 39%, 0.53); /* Vert thématique */
   margin-bottom: 8px; /* Plus d'espace sous l'icône */
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
 }
@@ -88,23 +88,32 @@
   font-size: 8px; /* Légèrement réduit pour l'esthétique */
   font-weight: 600; /* Ultra gras pour la lisibilité */
   color: #1a1a1a;
-  
   letter-spacing: 0.5px;
   line-height: 1.2;
 }
 
 /* -------------------- BOUTON QUITTER / FERMER -------------------- */
 .logout-btn {
-  background: rgba(239, 68, 68, 0.15) !important;
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(53, 53, 53, 0.235) !important;
+  border: 1px solid rgba(251, 250, 250, 0.77);
+  
+  backdrop-filter: blur(5px) saturate(30%);
+  padding: 3px 8px; /* Padding plus généreux */
+  border-radius: 21px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
 .logout-btn svg {
   color: #6805da !important;
+   padding: 1px 5px; /* Padding plus généreux */
+   margin-bottom: 8px; /* Plus d'espace sous l'icône */
+  
 }
 
 .logout-btn .label-mini {
-  color: #5e07eb;
+  color: #f53841;
+  margin-top: -20px;
+  padding: 8px;
 }
 
 .edge-close {

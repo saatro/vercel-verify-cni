@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { auth, db } from "../firebase";
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import MamboLock from "../components/MamboLock";
@@ -42,7 +42,6 @@ export default function LoginClient() {
       // Si connecté avec Auth (Google ou Schéma) mais profil inexistant dans Firestore
       console.warn("⚠️ Données Firestore introuvables.");
       toast.warn("Finalisation de votre profil requise.");
-      // On redirige vers l'inscription en passant les données récupérées
       setTimeout(() => navigate("/inscription-client", { 
         state: { 
           uid: user.uid, 
@@ -54,7 +53,7 @@ export default function LoginClient() {
     }
   };
 
-  // 1. Connexion Standard par Schéma
+  // 1. Connexion / Auto-création par Schéma
   const handlePatternLogin = async (e) => {
     e.preventDefault();
     
@@ -77,16 +76,35 @@ export default function LoginClient() {
       const technicalEmail = `${phone}@livraison-moto.firebaseapp.com`;
       const technicalPassword = generatePatternPassword(pattern, phone);
 
-      const userCredential = await signInWithEmailAndPassword(auth, technicalEmail, technicalPassword);
+      let userCredential;
+      try {
+        // Tentative de connexion standard
+        userCredential = await signInWithEmailAndPassword(auth, technicalEmail, technicalPassword);
+      } catch (signInErr) {
+        // Si le compte n'existe pas, on le crée automatiquement pour fluidifier l'accès
+        if (signInErr.code === "auth/user-not-found") {
+          userCredential = await createUserWithEmailAndPassword(auth, technicalEmail, technicalPassword);
+          
+          // Initialisation minimale dans Firestore si absent
+          await setDoc(doc(db, "users", userCredential.user.uid), {
+            telephone: phone,
+            role: "client",
+            createdAt: serverTimestamp()
+          }, { merge: true });
+
+          toast.success("Compte initialisé avec succès !");
+        } else {
+          throw signInErr;
+        }
+      }
+
       await verifyAndRedirect(userCredential.user);
 
     } catch (err) {
       console.error("Erreur Connexion Schéma :", err);
       if (err.code === "auth/internal-error" || err.message?.includes("503")) {
         toast.error("Le serveur est temporairement saturé. Veuillez réessayer.");
-      } else if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
-        toast.error("Aucun compte associé à ce numéro ou identifiants erronés.");
-      } else if (err.code === "auth/wrong-password") {
+      } else if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
         toast.error("Schéma incorrect.");
       } else {
         toast.error(authErrorMessage(err.code));

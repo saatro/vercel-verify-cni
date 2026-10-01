@@ -1,12 +1,8 @@
 /* ================================================================
    MarketplaceFull.css — MAMBO MARKET
-   Fixes :
-   • Shrunk : header sticky + classes .shrunk bien définies
-   • Layout : .mf-root = 100dvh flex-col, main scroll prend le reste
-   • Animations fluides
+   Mobile-first + Desktop centré anti-étirement
    ================================================================ */
 
-/* ── Tokens ── */
 :root {
   --mf-violet:        #7c3aed;
   --mf-violet-light:  #a78bfa;
@@ -16,25 +12,37 @@
   --mf-muted:         #94a3b8;
   --mf-border:        rgba(109,40,217,.10);
   --mf-radius:        20px;
-  --mf-header-h:      192px;   /* hauteur approximative header normal */
-  --mf-header-shrunk: 112px;   /* hauteur header rétracté */
+  --mf-header-h:      192px;
+  --mf-header-shrunk: 112px;
+  --mf-max:           720px;
 }
 
-/* ── Layout racine ──────────────────────────────────────────────────────────── */
+/* ── Layout racine ── */
 .mf-root {
   display: flex;
   flex-direction: column;
   height: 100dvh;
-  overflow: hidden;             /* empêche le scroll sur la page entière */
+  height: 100vh;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  overflow: hidden;
   background: var(--mf-bg);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--mf-text);
+  box-sizing: border-box;
+  position: relative;
 }
 
-/* ── HEADER ─────────────────────────────────────────────────────────────────── */
-/* sticky dans le flex = reste en haut, le main scroll en dessous */
+.mf-root *,
+.mf-root *::before,
+.mf-root *::after {
+  box-sizing: border-box;
+}
+
+/* ── HEADER ── */
 .market-header-modern {
-  flex-shrink: 0;               /* ← ne se compresse pas dans le flex */
+  flex-shrink: 0;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -44,23 +52,21 @@
   border-bottom: 4px solid rgba(104, 5, 233, 0.75);
   border-radius: 0 0 36px 36px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  /* Transition sur tout ce qui peut changer */
   transition:
     border-radius 0.35s ease,
     padding       0.35s ease,
     box-shadow    0.35s ease,
     background    0.35s ease;
   overflow: hidden;
+  width: 100%;
 }
 
-/* ── État SHRUNK ── */
 .market-header-modern.shrunk {
   border-radius: 0 0 22px 22px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
   background: rgba(237, 237, 240, 0.97);
 }
 
-/* Logo : réduit quand shrunk */
 .brand-logo-img {
   height: 52px;
   margin-top: 16px;
@@ -74,7 +80,6 @@
   margin-top: 0;
 }
 
-/* ── Ligne 1 : nav ── */
 .header-top-row {
   display: flex;
   align-items: center;
@@ -106,7 +111,6 @@
   margin-top: 1px;
 }
 
-/* ── Ligne 2 : recherche ── */
 .header-search-row {
   padding: 8px 16px 4px;
   transition: padding 0.3s ease;
@@ -141,6 +145,7 @@
   font-size: 13px;
   color: var(--mf-text);
   outline: none;
+  min-width: 0;
 }
 .modern-search-bar input::placeholder { color: var(--mf-muted); }
 .s-icon  { color: var(--mf-muted); flex-shrink: 0; }
@@ -155,7 +160,6 @@
   align-items: center;
 }
 
-/* ── Ligne 3 : catégories ── */
 .category-bar {
   display: flex;
   gap: 7px;
@@ -196,7 +200,6 @@
   margin-left: 2px;
 }
 
-/* ── Bannière catégorie ── */
 .mf-cat-banner {
   display: flex;
   align-items: center;
@@ -213,8 +216,7 @@
   cursor: pointer;
 }
 
-/* ── SCROLL PRINCIPAL ───────────────────────────────────────────────────────── */
-/* flex:1 = prend tout l'espace restant sous le header */
+/* ── SCROLL PRINCIPAL ── */
 .market-main-scroll {
   flex: 1;
   overflow-y: auto;
@@ -222,12 +224,13 @@
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
   scroll-behavior: smooth;
+  width: 100%;
 }
 
-/* ── Grille ── */
 .market-grid-container {
   padding: 6px 6px 20px;
   min-height: 60vh;
+  width: 100%;
 }
 
 /* ── Skeleton ── */
@@ -302,6 +305,7 @@
   z-index: 200;
   animation: mf-slide-up 0.3s ease;
   white-space: nowrap;
+  max-width: calc(100% - 32px);
 }
 .mf-cart-float-count {
   background: #ef4444;
@@ -337,7 +341,6 @@
   margin-left: 6px;
 }
 
-/* ── Boutons icon header ── */
 .nav-icon-btn {
   background: rgba(109,40,217,.07);
   border: 1px solid rgba(109,40,217,.12);
@@ -365,7 +368,8 @@
 /* ── SIDE NAV ── */
 .side-nav {
   position: fixed;
-  top: 0; left: -290px;
+  top: 0;
+  left: -290px;
   width: 280px;
   height: 100%;
   background: #1b213d;
@@ -393,9 +397,12 @@
   background: rgba(255,255,255,.08);
   border: none;
   color: #fff;
-  width: 36px; height: 36px;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   margin-bottom: 20px;
 }
@@ -411,13 +418,17 @@
   border: 1px solid rgba(255,255,255,.07);
 }
 .user-avatar-main {
-  width: 44px; height: 44px;
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
   overflow: hidden;
   border: 2px solid var(--mf-violet);
   background: rgba(124,58,237,.2);
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
 }
 .user-avatar-main img { width:100%; height:100%; object-fit:cover; }
 .u-name { font-size:14px; font-weight:800; color:#fff; margin:0; }
@@ -446,10 +457,72 @@
 .nav-auth-btn.login  { color: #a78bfa !important; }
 .nav-auth-btn.logout { color: #f87171 !important; }
 
-/* ── Responsive ── */
-@media (min-width: 640px) {
-  .mf-skeleton-grid { grid-template-columns: repeat(3, 1fr); }
+/* ── Responsive tablette ── */
+@media (min-width: 680px) {
+  .mf-skeleton-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
+
+/* ── Desktop PC : conteneur centré, pas d’étirement ── */
+@media (min-width: 1080px) {
+  body:has(.mf-root) {
+    background: #e2e8f0;
+  }
+
+  .mf-root {
+    max-width: var(--mf-max);
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.06), 0 24px 64px rgba(15, 23, 42, 0.12);
+  }
+
+  .mf-skeleton-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    padding: 18px;
+  }
+
+  .market-grid-container {
+    padding: 10px 12px 28px;
+  }
+
+  /* Panier centré dans la colonne app */
+  .mf-cart-float {
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 24px;
+    max-width: min(420px, calc(var(--mf-max) - 32px));
+  }
+
+  /* Side nav reste full viewport (hors colonne) — OK */
+}
+
 @media (min-width: 1024px) {
-  .mf-root { max-width: 480px; margin: 0 auto; }
+  :root {
+    --mf-max: 880px;
+  }
+
+  .mf-skeleton-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .header-top-row {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+
+  .header-search-row {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .category-bar {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --mf-max: 960px;
+  }
 }

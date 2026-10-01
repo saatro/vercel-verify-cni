@@ -154,7 +154,7 @@
   background: #f8fafc;
   border: 1.5px solid #e2e8f0;
   border-radius: 18px;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   color: #1e293b;
   outline: none;
@@ -177,28 +177,32 @@
   background: #f8fafc;
   border: 1.5px solid #e2e8f0;
   border-radius: 24px;
-  padding: 13px 10px;
+  padding: 5px 8px;
   margin-bottom: 13px;
   margin-top: 1px;
+  align-self: center;
+  justify-self: center;
 }
 
 .pattern-label {
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 800;
   color: #64748b;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  
   margin-bottom: 11px;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+  align-self: center;
+  justify-self: center;
+  gap: 9px;
 }
 
 .pattern-wrapper {
   background: #ffffff;
   border-radius: 20px;
-  padding: 5px;
+  padding: 3px;
+  align-self: center;
+  justify-self: center;
   display: inline-block;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
 }
@@ -211,7 +215,7 @@
 
 .pattern-wrapper svg line {
   stroke: #6366f1 !important;
-  stroke-width: 5px !important;
+  stroke-width: 3px !important;
 }
 
 /* ── Bouton principal ── */
@@ -222,7 +226,7 @@
   color: #ffffff;
   border: none;
   border-radius: 18px;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.5px;
   cursor: pointer;
@@ -325,7 +329,7 @@
   background: none;
   border: none;
   color: #6366f1;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 800;
   cursor: pointer;
   text-decoration: none;
@@ -371,6 +375,8 @@
     height: 40px;
     border-radius: 18px;
   }
+
+  
 
   .submit-btn {
     font-size: 13px;

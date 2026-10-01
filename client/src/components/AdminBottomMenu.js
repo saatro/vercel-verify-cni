@@ -6,7 +6,8 @@ import {
   MdMonetizationOn, 
   MdSecurity, 
   MdFactCheck,
-  MdLocationSearching // Nouvelle icône pour le diagnostic GPS
+  MdLocationSearching, // Nouvelle icône pour le diagnostic GPS
+  MdMessage // Icône pour la messagerie admin / support
 } from "react-icons/md";
 import { useLocation, useNavigate } from "react-router-dom";
 import "./AdminBottomMenu.css";
@@ -22,7 +23,8 @@ export default function AdminBottomMenu() {
     { label: "Accueil", icon: MdHome, path: "/admin-home" },
     { label: "Clients", icon: MdPeople, path: "/gestion-clients" },
     { label: "Livreurs", icon: MdDeliveryDining, path: "/gestion-livreurs" },
-    { label: "GPS", icon: MdLocationSearching, path: "/gps-diagnostic" }, // Ajout du diagnostic
+    { label: "GPS", icon: MdLocationSearching, path: "/gps-diagnostic" },
+    { label: "Inbox", icon: MdMessage, path: "/admin/inbox" }, // Ajout de la messagerie admin
     { label: "Jetons", icon: MdMonetizationOn, path: "/gestion-jetons" },
     { label: "Fraude", icon: MdSecurity, path: "/admin-fraud" },
     { label: "Preuves", icon: MdFactCheck, path: "/admin-proofs" },

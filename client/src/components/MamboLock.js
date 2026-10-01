@@ -1,128 +1,176 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from "react";
+import "../pages/LoginClient.css"; // Correction du chemin d'import du CSS
 
-const MamboLock = ({ onChange, size = 260 }) => {
-  const canvasRef = useRef(null);
+export default function MamboLock({ onChange, loading, size = 150 }) {
+  const [dots, setDots] = useState([]);
+  const [currentLine, setCurrentLine] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [nodes, setNodes] = useState([]);
-  const [path, setPath] = useState([]);
+  const containerRef = useRef(null);
 
-  // Initialisation des 9 points
+  // Initialisation des 9 points de la grille 3x3
+  const gridDots = [
+    { id: 1, x: 25, y: 25 },
+    { id: 2, x: 75, y: 25 },
+    { id: 3, x: 125, y: 25 },
+    { id: 4, x: 25, y: 75 },
+    { id: 5, x: 75, y: 75 },
+    { id: 6, x: 125, y: 75 },
+    { id: 7, x: 25, y: 125 },
+    { id: 8, x: 75, y: 125 },
+    { id: 9, x: 125, y: 125 },
+  ];
+
+  // Gestion des événements tactiles et souris avec { passive: false } pour éviter l'avertissement preventDefault
   useEffect(() => {
-    const padding = size * 0.13;
-    const spacing = (size - padding * 2) / 2;
-    const newNodes = [];
-    for (let row = 0; row < 3; row++) {
-      for (let col = 0; col < 3; col++) {
-        newNodes.push({
-          x: padding + col * spacing,
-          y: padding + row * spacing,
-          id: row * 3 + col
-        });
+    const container = containerRef.current;
+    if (!container) return;
+
+    const preventDefaultTouch = (e) => {
+      if (isDrawing) {
+        e.preventDefault();
+      }
+    };
+
+    container.addEventListener("touchmove", preventDefaultTouch, { passive: false });
+    return () => {
+      container.removeEventListener("touchmove", preventDefaultTouch);
+    };
+  }, [isDrawing]);
+
+  const getDotFromCoordinates = (clientX, clientY) => {
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    for (let dot of gridDots) {
+      const distance = Math.hypot(dot.x - x, dot.y - y);
+      if (distance < 25) {
+        return dot.id;
       }
     }
-    setNodes(newNodes);
-  }, [size]);
-
-  const getCoords = (e) => {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return { x: clientX - rect.left, y: clientY - rect.top };
+    return null;
   };
 
-  const startDrawing = (e) => {
-    e.preventDefault();
+  const handleStart = (id, clientX, clientY) => {
+    if (loading) return;
     setIsDrawing(true);
-    setPath([]);
-    handleMove(e);
-  };
-
-  const handleMove = (e) => {
-    if (!isDrawing) return;
-    const { x, y } = getCoords(e);
+    setDots([id]);
+    onChange([id]);
     
-    nodes.forEach((node) => {
-      const dist = Math.sqrt((x - node.x) ** 2 + (y - node.y) ** 2);
-      if (dist < 25 && !path.includes(node.id)) {
-        const newPath = [...path, node.id];
-        setPath(newPath);
-      }
-    });
-    draw(x, y);
+    const rect = containerRef.current.getBoundingClientRect();
+    const dot = gridDots.find((d) => d.id === id);
+    if (dot) {
+      setCurrentLine({ x1: dot.x, y1: dot.y, x2: clientX - rect.left, y2: clientY - rect.top });
+    }
   };
 
-  const stopDrawing = () => {
-    setIsDrawing(false);
-    if (path.length > 0) onChange(path);
-    draw();
-  };
+  const handleMove = (clientX, clientY) => {
+    if (!isDrawing || loading) return;
 
-  // Enveloppé dans useCallback pour stabiliser la référence mémoire et éliminer le warning ESLint
-  const draw = useCallback((curX, curY) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, size, size);
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
 
-    // Dessiner les lignes
-    if (path.length > 0) {
-      ctx.beginPath();
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = '#7407f086';
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      
-      const firstNode = nodes[path[0]];
-      if (firstNode) {
-        ctx.moveTo(firstNode.x, firstNode.y);
-        
-        for (let i = 1; i < path.length; i++) {
-          const node = nodes[path[i]];
-          if (node) ctx.lineTo(node.x, node.y);
-        }
-        
-        if (curX && curY) ctx.lineTo(curX, curY);
-        ctx.stroke();
-      }
+    const lastDotId = dots[dots.length - 1];
+    const lastDot = gridDots.find((d) => d.id === lastDotId);
+
+    if (lastDot) {
+      setCurrentLine({ x1: lastDot.x, y1: lastDot.y, x2: x, y2: y });
     }
 
-    // Dessiner les points
-    nodes.forEach((node) => {
-      const active = path.includes(node.id);
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, active ? 12 : 8, 0, Math.PI * 2);
-      ctx.fillStyle = active ? '#8c06fa' : '#e2e8f0';
-      ctx.fill();
-      if (active) {
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-      }
-    });
-  }, [nodes, path, size]);
+    const hitDotId = getDotFromCoordinates(clientX, clientY);
+    if (hitDotId && !dots.includes(hitDotId)) {
+      const newDots = [...dots, hitDotId];
+      setDots(newDots);
+      onChange(newDots);
+    }
+  };
 
-  // 'draw' est désormais une dépendance stable et sécurisée
-  useEffect(() => {
-    draw();
-  }, [nodes, path, draw]);
+  const handleEnd = () => {
+    if (!isDrawing) return;
+    setIsDrawing(false);
+    setCurrentLine(null);
+  };
 
   return (
-    <div style={{ touchAction: 'none', display: 'flex', justifyContent: 'center' }}>
-      <canvas
-        ref={canvasRef}
-        width={size}
-        height={size}
-        onMouseDown={startDrawing}
-        onMouseMove={handleMove}
-        onMouseUp={stopDrawing}
-        onTouchStart={startDrawing}
-        onTouchMove={handleMove}
-        onTouchEnd={stopDrawing}
-        style={{ cursor: 'crosshair', background: '#f8fafc', borderRadius: '20px' }}
-      />
+    <div 
+      ref={containerRef}
+      className="mambo-lock-container"
+      style={{ width: size, height: size, position: "relative", touchAction: "none" }}
+      onMouseUp={handleEnd}
+      onMouseLeave={handleEnd}
+      onTouchEnd={handleEnd}
+    >
+      <svg className="mambo-svg-lines" style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
+        {/* Lignes déjà validées */}
+        {dots.map((dotId, index) => {
+          if (index === 0) return null;
+          const prevDot = gridDots.find((d) => d.id === dots[index - 1]);
+          const currDot = gridDots.find((d) => d.id === dotId);
+          if (!prevDot || !currDot) return null;
+          return (
+            <line 
+              key={index}
+              x1={prevDot.x}
+              y1={prevDot.y}
+              x2={currDot.x}
+              y2={currDot.y}
+              stroke="#10b981"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+          );
+        })}
+
+        {/* Ligne active en cours de tracé */}
+        {currentLine && isDrawing && (
+          <line 
+            x1={currentLine.x1}
+            y1={currentLine.y1}
+            x2={currentLine.x2}
+            y2={currentLine.y2}
+            stroke="#10b981"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+        )}
+      </svg>
+
+      {/* Points de la grille */}
+      {gridDots.map((dot) => {
+        const isSelected = dots.includes(dot.id);
+        return (
+          <div
+            key={dot.id}
+            className={`mambo-dot ${isSelected ? "selected" : ""}`}
+            style={{
+              position: "absolute",
+              left: dot.x - 6,
+              top: dot.y - 12,
+              width: 21,
+              height: 21,
+              borderRadius: "34%",
+              background: isSelected ? "#10b981" : "rgba(255, 255, 255, 0.2)",
+              border: "1px solid #10b981",
+              cursor: "pointer",
+              transition: "background 0.2s, transform 0.2s",
+              transform: isSelected ? "scale(1.2)" : "scale(1)"
+            }}
+            onMouseDown={(e) => handleStart(dot.id, e.clientX, e.clientY)}
+            onMouseEnter={(e) => {
+              if (isDrawing) handleMove(e.clientX, e.clientY);
+            }}
+            onTouchStart={(e) => {
+              const touch = e.touches[0];
+              handleStart(dot.id, touch.clientX, touch.clientY);
+            }}
+            onTouchMove={(e) => {
+              const touch = e.touches[0];
+              handleMove(touch.clientX, touch.clientY);
+            }}
+          />
+        );
+      })}
     </div>
   );
-};
-
-export default MamboLock;
+}

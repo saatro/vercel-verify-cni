@@ -1,4 +1,3 @@
-
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { AlertTriangle, CheckCircle, Home, Loader2 } from 'lucide-react';
@@ -17,16 +16,12 @@ export default function Confirmation() {
   const [createdCourseId, setCreatedCourseId] = useState(null);
   const [creationError, setCreationError] = useState(null);
 
-  // Empêche une double écriture si l'effet se redéclenche (StrictMode,
-  // changement d'état d'auth, etc.)
   const hasCreatedRef = useRef(false);
 
   useEffect(() => {
     console.log("=== DONNÉES REÇUES À CONFIRMATION ===", state);
   }, [state]);
 
-  // Est-ce que cette visite correspond à une VRAIE réservation (VTC/moto/taxi)
-  // envoyée par ClientHome, ou juste une redirection sans contexte de commande ?
   const isBookingPayload = state.pickupLocation && state.dropoffLocation && (state.price != null);
 
   const createCourseDocument = useCallback(async (uid) => {
@@ -36,7 +31,6 @@ export default function Confirmation() {
     setStatusText("Création de votre course...");
 
     try {
-      // Nom / téléphone du destinataire réel de la course.
       let clientName = state.isForThirdParty ? state.thirdPartyName : "";
       let clientPhone = state.isForThirdParty ? state.thirdPartyPhone : "";
 
@@ -61,8 +55,8 @@ export default function Confirmation() {
         zone: zoneKey,
         isExterneZone,
 
-        vehicleType: state.vehicleType || "vtc",     // catégorie large : moto / vtc / taxi
-        vehicleId: state.vehicle || null,             // id précis : VtcEco, Moto, saloni...
+        vehicleType: state.vehicleType || "vtc",
+        vehicleId: state.vehicle || null,
         courseMode: state.mode || state.vehicle || "Standard",
         isCompteur: state.vehicle === "TaxiEco",
 
@@ -86,8 +80,6 @@ export default function Confirmation() {
         rejectedBy: [],
         createdAt: serverTimestamp(),
 
-        // Lien vers la commande boutique d'origine, si la course a été
-        // lancée depuis le dashboard vendeur pour un tiers.
         isTiersOrder: !!state.orderId || !!state.vendeurId,
         linkedOrderId: state.orderId || null,
         vendeurId: state.vendeurId || null,
@@ -99,12 +91,10 @@ export default function Confirmation() {
       let finalCourseId = "";
 
       if (state.orderId) {
-        // ID de course strictement calqué sur l'ID de la commande vendeur pour éviter les 404
         finalCourseId = state.orderId;
         const courseRef = doc(db, "courses", finalCourseId);
         await setDoc(courseRef, courseData);
       } else {
-        // ID auto-généré classiquement si la course ne découle pas d'une commande vendeur
         const newCourseRef = doc(collection(db, "courses"));
         finalCourseId = newCourseRef.id;
         await setDoc(newCourseRef, courseData);
@@ -112,8 +102,6 @@ export default function Confirmation() {
 
       setCreatedCourseId(finalCourseId);
 
-      // Si cette course provient d'une commande boutique existante, on la
-      // relie et on met à jour son statut pour que le vendeur voie l'avancement.
       if (state.orderId) {
         try {
           await updateDoc(doc(db, "orders", state.orderId), {
@@ -188,7 +176,6 @@ export default function Confirmation() {
           </span>
         </p>
 
-        {/* DEBUG */}
         <div style={{ margin: '20px 0', padding: '15px', background: '#f8fafc', borderRadius: '12px', fontSize: '12px', maxWidth: '90%' }}>
           <strong>Debug - Champs reçus :</strong><br />
           Nom : {state.thirdPartyName || "—"}<br />
@@ -220,4 +207,3 @@ export default function Confirmation() {
     </div>
   );
 }
-

@@ -1,6 +1,5 @@
-import React from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, onSnapshot, serverTimestamp, updateDoc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, serverTimestamp, updateDoc } from "firebase/firestore";
 import { getToken } from "firebase/messaging";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -8,11 +7,12 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { auth, db, messaging } from "./firebase";
+import CGUModal from "./pages/CGUModal";
 
 import { Loader2, MessageCircle } from "lucide-react";
 import { CartProvider } from "./Context/CartContext";
 import CartCourseWeb from "./pages/CartCourseWeb";
-import PrivacyPolicy from './pages/PrivacyPolicy';
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 
 import AdminFraudDashboard from "./components/AdminFraudDashboard";
 import MesCourses from "./components/MesCourses";
@@ -34,7 +34,8 @@ import GestionLivreurs from "./pages/GestionLivreurs";
 import GpsDiagnostic from "./pages/GpsDiagnostic";
 import HistoriqueGains from "./pages/HistoriqueGains";
 import ImmobilierPage from "./pages/ImmobilierPage";
-import LivreurExterne from "./pages/LivreurHome";   // ou le vrai chemin du fichier
+import InscriptionLivreurSecteurs from "./pages/InscriptionLivreurSecteurs";
+import LivreurExterne from "./pages/LivreurHome";
 import LoginClient from "./pages/LoginClient";
 import LoginCoursier from "./pages/LoginCoursier";
 import LoginLivreurSecteurs from "./pages/LoginLivreurSecteurs";
@@ -45,11 +46,14 @@ import PageAcces from "./pages/PageAcces";
 import PageConfirmation from "./pages/PageConfirmation";
 import PageInscriptionClient from "./pages/PageInscriptionClient";
 import PageInscriptionCoursier from "./pages/PageInscriptionCoursier";
-import InscriptionLivreurSecteurs from "./pages/InscriptionLivreurSecteurs";
 import ProductDetails from "./pages/ProductDetails";
+import PayerCommission from "./pages/PayerCommission";
 
+import PrintableQrPage from "./pages/PrintableQrPage";
 import ProfilLivreur from "./pages/ProfilLivreur";
 import RestoPage from "./pages/RestoPage";
+import Sante from "./pages/Sante";
+import FastFoodPage from "./pages/FastFoodPage";
 import StorePage from "./pages/StorePage";
 import SuccessPage from "./pages/SuccessPage";
 import SupermarketPage from "./pages/SupermarketPage";
@@ -59,29 +63,36 @@ import VehiculePage from "./pages/VehiculePage";
 import VendeurDashboard from "./pages/VendeurDashboard";
 import VendeurLogin from "./pages/VendeurLogin";
 import VendeurSignup from "./pages/VendeurSignup";
-import PrintableQrPage from "./pages/PrintableQrPage";
+import Dedomagement from "./pages/Dedomagement";
+import Negociation from "./pages/Negociation";
 
-// ── Configuration des rôles externes ───────────────────────────────────────
+import PayerVendeur from './components/PayerVendeur';
+import ClientInbox from './components/ClientInbox';
+import LivreurInbox from './components/LivreurInbox';
+import VendeurInbox from './components/VendeurInbox';
+import AdminInbox from './components/AdminInbox'; // ── Import de la messagerie Admin
+
 const EXTERNAL_ROLES = ["livreur-externe"];
 
 export default function App() {
-  const [user, setUser]       = useState(null);
-  const [role, setRole]       = useState("loading");
+  const [user, setUser] = useState(null);
+  const [role, setRole] = useState("loading");
   const [userZone, setUserZone] = useState("");
   const [loading, setLoading] = useState(true);
   const location = useLocation();
 
-  const isAssignPage   = location.pathname.includes('/assignation-') || location.pathname.includes('/cart-course/');
- 
-  const isCoursierPage = location.pathname.includes('/espace-coursier');
-  const isTrackingPage = location.pathname.includes('/tracking');
+  const isAssignPage =
+    location.pathname.includes("/assignation-") || location.pathname.includes("/cart-course/");
+  const isCoursierPage = location.pathname.includes("/espace-coursier");
+  
+  const isPayerCommissionPage = location.pathname.includes("/payer-commission");
 
   const contactAssistance = useCallback((orderId = "") => {
     const phone = "2250778073456";
-    const text  = orderId
+    const text = orderId
       ? `Bonjour Mambo Assistance, j'enregistre votre numéro pour confirmer le paiement Wave de la commande *${orderId}*.`
       : `Bonjour Mambo Assistance, j'enregistre votre numéro pour confirmer mon paiement Wave.`;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, "_blank");
   }, []);
 
   const setupNotifications = useCallback(async (userId) => {
@@ -89,21 +100,32 @@ export default function App() {
     try {
       const permission = await Notification.requestPermission();
       if (permission !== "granted") return;
-      const reg   = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
       const token = await getToken(messaging, {
         vapidKey: "BDE5b26fkUCHbCy7IzjX30eDjJpfQev7GWOrKc6yJxUV48L0XInKEd2urQwzuqUgjQ5UAfP9EcvZ3gtXYI52oII",
         serviceWorkerRegistration: reg,
       });
-      if (token) await updateDoc(doc(db, "users", userId), { fcmToken: token, notificationsEnabled: true, lastTokenUpdate: serverTimestamp() }).catch(() => {});
-    } catch { console.warn("⚠️ FCM non configuré"); }
+      if (token) {
+        await updateDoc(doc(db, "users", userId), {
+          fcmToken: token,
+          notificationsEnabled: true,
+          lastTokenUpdate: serverTimestamp(),
+        }).catch(() => {});
+      }
+    } catch {
+      console.warn("⚠️ FCM non configuré");
+    }
   }, []);
 
   useEffect(() => {
     let unsubscribeRole = null;
-    let isSubscribed    = true;
+    let isSubscribed = true;
 
     const unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (unsubscribeRole) { unsubscribeRole(); unsubscribeRole = null; }
+      if (unsubscribeRole) {
+        unsubscribeRole();
+        unsubscribeRole = null;
+      }
 
       if (firebaseUser) {
         setUser(firebaseUser);
@@ -112,11 +134,11 @@ export default function App() {
         const waitForDoc = async (retries = 5, delay = 1000) => {
           for (let i = 0; i < retries; i++) {
             for (let j = 0; j < retries; j++) {
-              try { 
-                const s = await getDoc(doc(db, "users", firebaseUser.uid)); 
-                if (s.exists()) return s; 
+              try {
+                const s = await getDoc(doc(db, "users", firebaseUser.uid));
+                if (s.exists()) return s;
               } catch {}
-              await new Promise(r => setTimeout(r, delay));
+              await new Promise((r) => setTimeout(r, delay));
             }
           }
           return null;
@@ -129,12 +151,12 @@ export default function App() {
               if (!isSubscribed) return;
               if (docSnap.exists()) {
                 const d = docSnap.data();
-                if (d.banned) { 
-                  await signOut(auth); 
-                  setRole("guest"); 
+                if (d.banned) {
+                  await signOut(auth);
+                  setRole("guest");
                   setUserZone("");
-                } else { 
-                  setRole(d.role?.toLowerCase().trim() || "client"); 
+                } else {
+                  setRole(d.role?.toLowerCase().trim() || "client");
                   setUserZone(d.sectorZone || d.zone || "");
                 }
                 setLoading(false);
@@ -145,24 +167,27 @@ export default function App() {
                   const dataSnap = snap.data();
                   setRole(dataSnap.role?.toLowerCase().trim() || "client");
                   setUserZone(dataSnap.sectorZone || dataSnap.zone || "");
-                } else { 
-                  try { 
-                    const cs = await getDoc(doc(db, "coursiers", firebaseUser.uid)); 
+                } else {
+                  try {
+                    const cs = await getDoc(doc(db, "coursiers", firebaseUser.uid));
                     setRole(cs.exists() ? "coursier" : "client");
                     setUserZone("");
-                  } catch { 
-                    setRole("client"); 
+                  } catch {
+                    setRole("client");
                     setUserZone("");
-                  } 
+                  }
                 }
                 setLoading(false);
               }
             },
             async (error) => {
               console.warn("onSnapshot réinitialisé ou bloqué, code :", error.code);
-              if (unsubscribeRole) { unsubscribeRole(); unsubscribeRole = null; }
+              if (unsubscribeRole) {
+                unsubscribeRole();
+                unsubscribeRole = null;
+              }
               if (!isSubscribed) return;
-              
+
               try {
                 const snap = await waitForDoc();
                 if (!isSubscribed) return;
@@ -184,26 +209,29 @@ export default function App() {
             }
           );
         }
-      } else { 
-        setUser(null); 
-        setRole("guest"); 
+      } else {
+        setUser(null);
+        setRole("guest");
         setUserZone("");
-        setLoading(false); 
+        setLoading(false);
       }
     });
 
-    return () => { isSubscribed = false; unsubAuth(); if (unsubscribeRole) unsubscribeRole(); };
+    return () => {
+      isSubscribed = false;
+      unsubAuth();
+      if (unsubscribeRole) unsubscribeRole();
+    };
   }, [setupNotifications]);
 
-  // ── Redirection racine simplifiée ───────────────────────────────────────
   const rootRedirect = () => {
     if (role === "loading") return <div className="min-h-screen bg-slate-900" />;
-    if (!user)                                 return <Navigate to="/acces" replace />;
-    if (role === "admin")                       return <Navigate to="/admin-home" replace />;
-    if (role === "livreur")                     return <Navigate to="/livreur-home" replace />;
-    if (role === "vendeur")                     return <Navigate to="/vendeur-dashboard" replace />;
-    if (role === "coursier")                    return <Navigate to="/espace-coursier" replace />;
-    
+    if (!user) return <Navigate to="/acces" replace />;
+    if (role === "admin") return <Navigate to="/admin-home" replace />;
+    if (role === "livreur") return <Navigate to="/livreur-home" replace />;
+    if (role === "vendeur") return <Navigate to="/vendeur-dashboard" replace />;
+    if (role === "coursier") return <Navigate to="/espace-coursier" replace />;
+
     if (EXTERNAL_ROLES.includes(role)) {
       const zone = userZone || "default";
       return <Navigate to={`/livreur-secteur/${zone}`} replace />;
@@ -215,23 +243,18 @@ export default function App() {
   return (
     <CartProvider>
       <div className="min-h-screen antialiased bg-slate-50 text-slate-800">
-        <ToastContainer 
-          position="top-center" 
-          autoClose={3500} 
-          limit={1} 
-          closeButton={false}
-        />
+        <ToastContainer position="top-center" autoClose={3500} limit={1} closeButton={false} />
 
-        {/* Bouton d'assistance fixe */}
-        {(isAssignPage || isCoursierPage || isTrackingPage) && role !== "admin" && (
-          <button 
-            onClick={() => contactAssistance()} 
-            className="fixed bottom-32 right-6 z-[2000] bg-emerald-600 hover:bg-emerald-500 text-white p-4 rounded-full shadow-xl shadow-emerald-900/10 transform hover:scale-110 active:scale-95 transition-all duration-300 flex items-center justify-center group"
-            aria-label="Contacter l'assistance"
-          >
-            <MessageCircle size={22} className="group-hover:animate-pulse" />
-          </button>
-        )}
+        {(isAssignPage || isCoursierPage ||  isPayerCommissionPage) &&
+          role !== "admin" && (
+            <button
+              onClick={() => contactAssistance()}
+              className="fixed bottom-32 right-6 z-[2000] bg-emerald-600 hover:bg-emerald-500 text-white p-4 rounded-full shadow-xl shadow-emerald-900/10 transform hover:scale-110 active:scale-95 transition-all duration-300 flex items-center justify-center group"
+              aria-label="Contacter l'assistance"
+            >
+              <MessageCircle size={22} className="group-hover:animate-pulse" />
+            </button>
+          )}
 
         {loading ? (
           <div className="fixed inset-0 z-[3000] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm transition-all duration-300">
@@ -245,79 +268,329 @@ export default function App() {
             <Route path="/" element={rootRedirect()} />
 
             {/* Auth */}
-            <Route path="/acces"                   element={<PageAcces />} />
-            <Route path="/login-client"           element={<LoginClient />} />
-            <Route path="/login-marketplace"      element={<LoginMarketplace />} />
-            <Route path="/login-livreur/:zone"    element={<LoginLivreurSecteurs />} />
-            <Route path="/login-livreur"          element={<LoginLivreurSecteurs />} />
-            <Route path="/login-coursier"         element={<LoginCoursier />} />
-            <Route path="/admin-login"            element={<AdminLogin />} />
-            <Route path="/vendeur-login"          element={<VendeurLogin />} />
-            <Route path="/vendeur-signup"         element={<VendeurSignup />} />
-            <Route path="/inscription-client"     element={<PageInscriptionClient />} />
-            <Route path="/inscription-coursier"   element={<PageInscriptionCoursier />} />
+            <Route path="/acces" element={<PageAcces />} />
+            <Route path="/login-client" element={<LoginClient />} />
+            <Route path="/login-marketplace" element={<LoginMarketplace />} />
+            <Route path="/login-livreur/:zone" element={<LoginLivreurSecteurs />} />
+            <Route path="/login-livreur" element={<LoginLivreurSecteurs />} />
+            <Route path="/login-coursier" element={<LoginCoursier />} />
+            <Route path="/admin-login" element={<AdminLogin />} />
+            <Route path="/vendeur-login" element={<VendeurLogin />} />
+            <Route path="/vendeur-signup" element={<VendeurSignup />} />
+            <Route path="/inscription-client" element={<PageInscriptionClient />} />
+            <Route path="/inscription-coursier" element={<PageInscriptionCoursier />} />
             <Route path="/register-livreur/:zone" element={<InscriptionLivreurSecteurs />} />
-            <Route path="/register-livreur"       element={<InscriptionLivreurSecteurs />} />
+            <Route path="/register-livreur" element={<InscriptionLivreurSecteurs />} />
 
             {/* Client & Services */}
-            <Route path="/client-home" element={
-              <ProtectedRoute allow={["client","admin","vendeur","guest"]} userRole={role} userZone={userZone}>
-                <ClientHome />
-              </ProtectedRoute>
-            }/>
+            <Route
+              path="/client-home"
+              element={
+                <ProtectedRoute
+                  allow={["client", "admin", "vendeur", "coursier", "guest"]}
+                  userRole={role}
+                  userZone={userZone}
+                >
+                  <ClientHome />
+                </ProtectedRoute>
+              }
+            />
 
-            <Route path="/marketplace"      element={<MarketplaceFull />} />
-            <Route path="/marketplace-full" element={<MarketplaceFull />} />
+            {/* Routes du Marché protégées */}
+            <Route 
+              path="/marketplace" 
+              element={
+                <ProtectedRoute 
+                  allow={["client", "livreur", "livreur-externe", "admin", "vendeur", "guest"]} 
+                  userRole={role} 
+                  userZone={userZone}
+                >
+                  <MarketplaceFull />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/marketplace-full" 
+              element={
+                <ProtectedRoute 
+                  allow={["client", "livreur", "livreur-externe", "admin", "vendeur", "guest"]} 
+                  userRole={role} 
+                  userZone={userZone}
+                >
+                  <MarketplaceFull />
+                </ProtectedRoute>
+              } 
+            />
+
             <Route path="/product/:id" element={<ProductDetails />} />
-            <Route path="/cart"        element={<CartPage />} />
+            <Route path="/cart" element={<CartPage />} />
+            <Route path="/dedomagement" element={<Dedomagement />} />
+            <Route path="/negociation" element={<Negociation />} />
 
-            <Route path="/store"                                     element={<StorePage />} />
-            <Route path="/store/:vendorId"                           element={<StorePage />} />
+            <Route path="/store" element={<StorePage />} />
+            <Route path="/store/:vendorId" element={<StorePage />} />
             <Route path="/store/:vendorId/:productId" element={<StorePage />} />
 
-            <Route path="/supermarket" element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><SupermarketPage /></ProtectedRoute>} />
-            <Route path="/resto"       element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><RestoPage /></ProtectedRoute>} />
-            <Route path="/vtc"         element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><VehiculePage /></ProtectedRoute>} />
-            <Route path="/immobilier"  element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><ImmobilierPage /></ProtectedRoute>} />
-            <Route path="/vehicule"  element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><VehiculePage /></ProtectedRoute>} />
-            <Route path="/mes-courses" element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><MesCourses /></ProtectedRoute>} />
-            <Route path="/profil-client" element={<ProtectedRoute allow={["client","admin"]} userRole={role} userZone={userZone}><ProfilClient /></ProtectedRoute>} />
+            <Route
+              path="/supermarket"
+              element={
+                <ProtectedRoute allow={["client", "admin"]} userRole={role} userZone={userZone}>
+                  <SupermarketPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/resto"
+              element={
+                <ProtectedRoute allow={["client", "admin"]} userRole={role} userZone={userZone}>
+                  <RestoPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/fast-food"
+              element={
+                <ProtectedRoute allow={["client", "admin"]} userRole={role} userZone={userZone}>
+                  <FastFoodPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/sante"
+              element={
+                <ProtectedRoute allow={["client", "admin"]} userRole={role} userZone={userZone}>
+                  <Sante />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/vtc"
+              element={
+                <ProtectedRoute allow={["client", "admin"]} userRole={role} userZone={userZone}>
+                  <VehiculePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/immobilier"
+              element={
+                <ProtectedRoute allow={["client", "admin"]} userRole={role} userZone={userZone}>
+                  <ImmobilierPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/vehicule"
+              element={
+                <ProtectedRoute allow={["client", "admin"]} userRole={role} userZone={userZone}>
+                  <VehiculePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/mes-courses"
+              element={
+                <ProtectedRoute allow={["client", "admin"]} userRole={role} userZone={userZone}>
+                  <MesCourses />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profil-client"
+              element={
+                <ProtectedRoute allow={["client", "admin"]} userRole={role} userZone={userZone}>
+                  <ProfilClient />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
 
-            {/* Confirmations & Suivi */} 
-            <Route path="/confirmation"        element={<PageConfirmation />} />
-            <Route path="/page-confirmation"   element={<PageConfirmation />} />
-            <Route path="/tracking/:id"        element={<Tracking />} />
-            <Route path="/success"             element={<SuccessPage />} />
+            {/* Confirmations & Suivi */}
+            <Route path="/confirmation" element={<PageConfirmation />} />
+            <Route path="/page-confirmation" element={<PageConfirmation />} />
+            <Route path="/tracking/:id" element={<Tracking />} />
+            <Route path="/success" element={<SuccessPage />} />
             <Route path="/confirmation-market" element={<ConfirmationMarket />} />
             <Route path="/cart-course/:orderId" element={<CartCourseWeb />} />
 
+            {/* Paiement commission (lien WhatsApp — accès public) */}
+            <Route path="/payer-commission" element={<PayerCommission />} />
+
             {/* Livreurs / Coursiers */}
-            <Route path="/espace-coursier"       element={<ProtectedRoute allow={["coursier","admin"]} userRole={role} userZone={userZone}><EspaceCoursier /></ProtectedRoute>} />
-            <Route path="/profil-livreur"        element={<ProtectedRoute allow={["livreur", "livreur-externe", "coursier","admin"]} userRole={role} userZone={userZone}><ProfilLivreur /></ProtectedRoute>} />
-            <Route path="/upload-recu"           element={<ProtectedRoute allow={["livreur", "livreur-externe", "coursier", "vendeur","admin"]} userRole={role} userZone={userZone}><UploadRecu /></ProtectedRoute>} />
-            <Route path="/livreur-home"          element={<ProtectedRoute allow={["livreur","admin"]} userRole={role} userZone={userZone}><LivreurExterne /></ProtectedRoute>} />
-            <Route path="/livreur-secteur/:zone" element={<ProtectedRoute allow={["livreur-externe","admin"]} userRole={role} userZone={userZone}><LivreurExterne /></ProtectedRoute>} />
-            
+            <Route
+              path="/espace-coursier"
+              element={
+                <ProtectedRoute allow={["coursier", "admin"]} userRole={role} userZone={userZone}>
+                  <EspaceCoursier />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profil-livreur"
+              element={
+                <ProtectedRoute
+                  allow={["livreur", "livreur-externe", "coursier", "admin"]}
+                  userRole={role}
+                  userZone={userZone}
+                >
+                  <ProfilLivreur />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/upload-recu"
+              element={
+                <ProtectedRoute
+                  allow={["livreur", "livreur-externe", "coursier", "vendeur", "admin"]}
+                  userRole={role}
+                  userZone={userZone}
+                >
+                  <UploadRecu />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/livreur-home"
+              element={
+                <ProtectedRoute allow={["livreur", "admin"]} userRole={role} userZone={userZone}>
+                  <LivreurExterne />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/livreur-secteur/:zone"
+              element={
+                <ProtectedRoute allow={["livreur-externe", "admin"]} userRole={role} userZone={userZone}>
+                  <LivreurExterne />
+                </ProtectedRoute>
+              }
+            />
+
             {/* Vendeur */}
-            <Route path="/vendeur-dashboard" element={<ProtectedRoute allow={["vendeur","admin"]} userRole={role} userZone={userZone}><VendeurDashboard /></ProtectedRoute>} />
-            <Route path="/historique-gains"      element={<ProtectedRoute allow={["livreur","livreur-externe","coursier","admin"]} userRole={role} userZone={userZone}><HistoriqueGains /></ProtectedRoute>} />
+            <Route
+              path="/vendeur-dashboard"
+              element={
+                <ProtectedRoute allow={["vendeur", "admin"]} userRole={role} userZone={userZone}>
+                  <VendeurDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/historique-gains"
+              element={
+                <ProtectedRoute
+                  allow={["livreur", "livreur-externe", "coursier", "admin"]}
+                  userRole={role}
+                  userZone={userZone}
+                >
+                  <HistoriqueGains />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Admin */}
-            <Route path="/assignation-automatique/:orderId" element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><AssignationAutomatique /></ProtectedRoute>} />
-            <Route path="/assignation-coursier/:orderId"    element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><AssignationCoursier /></ProtectedRoute>} />
-            <Route path="/admin-home"          element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><AdminHome /></ProtectedRoute>} />
-            <Route path="/admin/print-qr"      element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><PrintableQrPage /></ProtectedRoute>} />
-            <Route path="/gestion-livreurs"    element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><GestionLivreurs /></ProtectedRoute>} />
-            <Route path="/gestion-clients"     element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><GestionClients /></ProtectedRoute>} />
-            <Route path="/gestion-jetons"      element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><GestionJetons /></ProtectedRoute>} />
-            <Route path="/gestion-connexions"  element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><GestionConnexions /></ProtectedRoute>} />
-            <Route path="/admin-frauds"        element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><AdminFraudDashboard /></ProtectedRoute>} />
-            <Route path="/admin-proofs"        element={<ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}><AdminProofs /></ProtectedRoute>} />
+            <Route
+              path="/assignation-automatique/:orderId"
+              element={
+                <ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}>
+                  <AssignationAutomatique />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/assignation-coursier/:orderId"
+              element={
+                <ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}>
+                  <AssignationCoursier />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin-home"
+              element={
+                <ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}>
+                  <AdminHome />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/print-qr"
+              element={
+                <ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}>
+                  <PrintableQrPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/gestion-livreurs"
+              element={
+                <ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}>
+                  <GestionLivreurs />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/gestion-clients"
+              element={
+                <ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}>
+                  <GestionClients />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/gestion-jetons"
+              element={
+                <ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}>
+                  <GestionJetons />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/gestion-connexions"
+              element={
+                <ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}>
+                  <GestionConnexions />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin-frauds"
+              element={
+                <ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}>
+                  <AdminFraudDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin-proofs"
+              element={
+                <ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}>
+                  <AdminProofs />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* Routes Admin Inbox & Messageries */}
+            <Route 
+              path="/admin/inbox" 
+              element={
+                <ProtectedRoute allow={["admin"]} userRole={role} userZone={userZone}>
+                  <AdminInbox />
+                </ProtectedRoute>
+              } 
+            />
+
+            
+<Route path="/payer-vendeur" element={<PayerVendeur />} />
+<Route path="/payer-vendeur/:vendeurId" element={<PayerVendeur />} />
+            <Route path="/client/boite-de-reception" element={<ClientInbox clientId={user ? user.uid : null} />} />
+            <Route path="/livreur/inbox" element={<LivreurInbox currentUser={user} />} />
+            <Route path="/vendeur/inbox" element={<VendeurInbox currentUser={user} />} />
 
             {/* Outils */}
-            <Route path="/gps-diagnostic"    element={<GpsDiagnostic />} />
-            <Route path="/migration-gps"     element={<MigrationGPS />} />
+            <Route path="/cgu-modal" element={<CGUModal />} />
+            <Route path="/gps-diagnostic" element={<GpsDiagnostic />} />
+            <Route path="/migration-gps" element={<MigrationGPS />} />
             <Route path="/emergency-offline" element={<ForceOfflineEmergency />} />
 
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -2,8 +2,35 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { ChevronLeft, MapPin, Package, User, Phone, PlusCircle } from 'lucide-react';
+import { ChevronLeft, MapPin, Package, UserX, PhoneOff, PlusCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
+
+/**
+ * Fonction utilitaire pour masquer les chiffres centraux du téléphone[cite: 2]
+ */
+const maskPhoneNumber = (phone) => {
+  if (!phone) return 'Non renseigné';
+  const str = String(phone).trim();
+  if (str.length < 8) return '********';
+
+  const firstPart = str.slice(0, 5);
+  const lastPart = str.slice(-4);
+  const maskedLength = Math.max(str.length - 9, 4);
+  
+  return `${firstPart}${'*'.repeat(maskedLength)}${lastPart}`;
+};
+
+/**
+ * Fonction utilitaire pour masquer le nom du client (ex: "KUIE GIRARD" -> "K*** G*****")
+ */
+const maskClientName = (name) => {
+  if (!name) return 'Client masqué';
+  const parts = String(name).trim().split(' ');
+  return parts.map(part => {
+    if (part.length <= 1) return part;
+    return part[0] + '*'.repeat(part.length - 1);
+  }).join(' ');
+};
 
 export default function VendeurCommandeDetail({ orderId, onBack }) {
   const navigate = useNavigate();
@@ -41,9 +68,6 @@ export default function VendeurCommandeDetail({ orderId, onBack }) {
   const handleLaunchTiers = useCallback(async () => {
     if (!order) return toast.error("Commande non chargée");
 
-    // Le document `orders` ne contient pas toujours nom/téléphone/adresse
-    // du client, ni l'adresse de départ du vendeur (`departAdresse` n'est
-    // jamais écrit sur la commande). On complète via les profils Firestore.
     let clientName = order.clientName || order.nomClient || order.nom || "";
     let clientPhone = order.clientPhone || order.telephoneClient || order.telephone || "";
     let deliveryAddress = order.deliveryAddress || order.adresseLivraison || order.adresse || "";
@@ -92,7 +116,7 @@ export default function VendeurCommandeDetail({ orderId, onBack }) {
       vendeurNom,
       departAdresse,
 
-      // Client (destinataire)
+      // Client (destinataire) transmis en entier pour la course
       prefillName: clientName,
       prefillPhone: clientPhone,
       targetDestination: deliveryAddress,
@@ -108,6 +132,9 @@ export default function VendeurCommandeDetail({ orderId, onBack }) {
 
   if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: '#6d28d9' }}>Chargement des détails...</div>;
   if (!order) return null;
+
+  const rawName = order.clientName || order.nomClient || order.nom || '';
+  const rawPhone = order.clientPhone || order.telephoneClient || order.telephone || '';
 
   return (
     <div className="vendeur-commande-detail" style={{ padding: '16px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'sans-serif' }}>
@@ -156,18 +183,33 @@ export default function VendeurCommandeDetail({ orderId, onBack }) {
           <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '700' }}>DESTINATION</h4>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '14px', color: '#334155' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <User size={16} color="#94a3b8" />
-            <span style={{ fontWeight: '600', color: '#1e293b' }}>
-              {order.clientName || order.nomClient || order.nom || 'Client'}
+          
+          {/* Nom du client masqué */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <UserX size={16} color="#dc2626" />
+              <span style={{ fontWeight: '600', color: '#1e293b', letterSpacing: '0.03em' }}>
+                {maskClientName(rawName)}
+              </span>
+            </div>
+            <span style={{ fontSize: '10px', background: '#fee2e2', color: '#dc2626', padding: '2px 8px', borderRadius: '12px', fontWeight: '700' }}>
+              Nom protégé
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Phone size={16} color="#94a3b8" />
-            <span style={{ fontWeight: '500' }}>
-              {order.clientPhone || order.telephoneClient || order.telephone || ''}
+
+          {/* Téléphone du client masqué */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <PhoneOff size={16} color="#dc2626" />
+              <span style={{ fontWeight: '600', color: '#0f172a', letterSpacing: '0.03em' }}>
+                {maskPhoneNumber(rawPhone)}
+              </span>
+            </div>
+            <span style={{ fontSize: '10px', background: '#fee2e2', color: '#dc2626', padding: '2px 8px', borderRadius: '12px', fontWeight: '700' }}>
+              Numéro protégé
             </span>
           </div>
+
           <div style={{ display: 'flex', alignItems: 'start', gap: '8px', marginTop: '4px', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
             <MapPin size={16} color="#6d28d9" style={{ marginTop: '2px' }} />
             <span style={{ color: '#0f172a', fontWeight: '500' }}>

@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import React, { useEffect, useState, useMemo } from "react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
@@ -103,7 +104,7 @@ export default function ImmobilierPage() {
 
         <div className="assistance-notice" style={{ background: '#e0f2fe', color: '#0369a1' }}>
           <Info size={14} />
-          <span>Contactez l'assistance pour visiter un bien ou confirmer une réservation.</span>
+          <span>Contactez l'assistance pour visiter un bien ou confirmer une réservation via Wave. Enregistrez le contact assistance pour valider votre reçu.</span>
         </div>
       </header>
 
@@ -135,7 +136,6 @@ export default function ImmobilierPage() {
                       <div key={p.id} className="light-product-card" onClick={() => navigate(`/product/${p.id}`)}>
                         <div className="p-img-box">
                           <img src={p.images?.[0] || p.imageUrl} alt={p.nom} style={{ objectFit: 'cover' }} />
-                          {/* Badge de type de bien */}
                           <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '0.6rem' }}>
                             {p.typeBien || "Logement"}
                           </div>

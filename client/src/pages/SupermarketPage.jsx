@@ -1,9 +1,3 @@
-// SupermarketPage.jsx
-// Structure Firestore réelle :
-//   { type:"supermarche", nom, prix, unite, marque, poidsVolume, reference,
-//     stock, categorie, description, images[], image, nomBoutique, logoBoutique,
-//     vendorId, marque, conservation, allergenes, code_barre, origine }
-
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
@@ -16,15 +10,12 @@ import { useCart } from "../Context/CartContext";
 import { toast, ToastContainer } from "react-toastify";
 import "./SupermarketPage.css";
 
-
-// ── Catégories alimentaires (depuis les données réelles Firestore) ─────────────
 const SUPER_CATEGORIES = [
   "Tout", "Alimentation", "Fruits & Légumes", "Viandes & Poissons",
   "Produits laitiers", "Boissons", "Surgelés", "Hygiène & Beauté",
   "Bébé", "Entretien", "Épicerie",
 ];
 
-// ── Badge stock ────────────────────────────────────────────────────────────────
 function StockBadge({ stock }) {
   if (stock === undefined || stock === null) return null;
   if (stock === 0) return (
@@ -44,18 +35,16 @@ function StockBadge({ stock }) {
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
 export default function SupermarketPage() {
   const navigate    = useNavigate();
   const { addToCart } = useCart();
 
   const [products,   setProducts]   = useState([]);
-  const [vendors,    setVendors]     = useState({});   // { vendorId: vendorData }
+  const [vendors,    setVendors]     = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab,  setActiveTab]  = useState("Tout");
   const [loading,    setLoading]    = useState(true);
 
-  // ── Produits type supermarché ──────────────────────────────────────────────
   useEffect(() => {
     const q = query(collection(db, "products"), where("type", "==", "supermarche"));
     const unsub = onSnapshot(q, (snap) => {
@@ -63,12 +52,10 @@ export default function SupermarketPage() {
       setProducts(prods.sort((a, b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0)));
       setLoading(false);
 
-      // Charge les vendeurs uniques non encore chargés
       const uniqueVIds = [...new Set(prods.map(p => p.vendorId).filter(Boolean))];
       setVendors(prev => {
         const missing = uniqueVIds.filter(id => !prev[id]);
         if (!missing.length) return prev;
-        // Snapshot vendeurs
         missing.forEach(vid => {
           import("firebase/firestore").then(({ doc, getDoc }) => {
             getDoc(doc(db, "vendors", vid)).then(s => {
@@ -82,7 +69,6 @@ export default function SupermarketPage() {
     return () => unsub();
   }, []);
 
-  // ── Filtrage ───────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
     return products.filter(p => {
@@ -93,7 +79,6 @@ export default function SupermarketPage() {
     });
   }, [products, searchTerm, activeTab]);
 
-  // ── Grouper par vendeur ────────────────────────────────────────────────────
   const byVendor = useMemo(() => {
     const map = {};
     filtered.forEach(p => {
@@ -111,19 +96,16 @@ export default function SupermarketPage() {
     toast.success(`${p.nom} ajouté au panier !`, { autoClose: 1200, hideProgressBar: true });
   }, [addToCart]);
 
-  // ── Compteur total catégories ──────────────────────────────────────────────
   const catCounts = useMemo(() => {
     const c = { Tout: products.length };
     products.forEach(p => { if (p.categorie) c[p.categorie] = (c[p.categorie]||0)+1; });
     return c;
   }, [products]);
 
-  // ═══════════════════════════════════════════════════════════════════════════
   return (
     <div style={S.root}>
       <ToastContainer position="top-center" autoClose={1200} hideProgressBar/>
 
-      {/* ── HEADER ── */}
       <header style={S.header}>
         <div style={S.headerTop}>
           <button style={S.iconBtn} onClick={() => navigate(-1)}><ArrowLeft size={22}/></button>
@@ -136,7 +118,6 @@ export default function SupermarketPage() {
           </button>
         </div>
 
-        {/* Recherche */}
         <div style={S.searchBox}>
           <Search size={16} color="#94a3b8"/>
           <input style={S.searchInput} type="text"
@@ -148,15 +129,13 @@ export default function SupermarketPage() {
           )}
         </div>
 
-        {/* Info Wave */}
         <div style={S.waveBanner}>
           <Info size={14} style={{flexShrink:0}}/>
           <p style={{margin:0,fontSize:11,lineHeight:1.5}}>
-            Paiement <strong>Wave</strong> accepté — Reçu validé par IA en quelques secondes.
+            Paiement <strong>Wave</strong> accepté — Enregistrez le contact assistance pour valider votre paiement par contrôle du reçu complet depuis l'interface Wave.
           </p>
         </div>
 
-        {/* Onglets catégories */}
         <div style={S.tabs}>
           {SUPER_CATEGORIES.filter(c => c==="Tout" || (catCounts[c]||0)>0).map(cat => (
             <button key={cat} onClick={()=>setActiveTab(cat)}
@@ -168,7 +147,6 @@ export default function SupermarketPage() {
         </div>
       </header>
 
-      {/* ── CONTENU ── */}
       <main style={S.main}>
         {loading ? (
           <div style={S.loader}>
@@ -189,7 +167,6 @@ export default function SupermarketPage() {
             const addr  = v.adresse || "";
             return (
               <section key={group.vendorId} style={S.vendorSection}>
-                {/* En-tête vendeur */}
                 <div style={S.vendorHeader} onClick={()=>navigate(`/store/${group.vendorId}`)}>
                   <div style={S.vendorLeft}>
                     {logo
@@ -206,7 +183,6 @@ export default function SupermarketPage() {
                   </span>
                 </div>
 
-                {/* Grille produits */}
                 <div style={S.productsGrid}>
                   {group.products.map(p => (
                     <ProductCard key={p.id} product={p} onAdd={handleAdd}
@@ -228,24 +204,20 @@ export default function SupermarketPage() {
   );
 }
 
-// ── Carte produit supermarché ──────────────────────────────────────────────────
 function ProductCard({ product: p, onAdd, onClick }) {
   const img = p.images?.[0] || p.image;
   const outOfStock = (p.stock || 0) === 0;
 
   return (
     <div style={{...S.card, opacity: outOfStock ? 0.7 : 1}} onClick={onClick}>
-      {/* Image */}
       <div style={S.cardImg}>
         {img
           ? <img src={img} alt={p.nom} style={{width:'100%',height:'100%',objectFit:'cover'}}/>
           : <div style={{width:'100%',height:'100%',background:'#f1f5f9',display:'flex',alignItems:'center',justifyContent:'center'}}><Package size={28} color="#cbd5e1"/></div>
         }
-        {/* Badge prix promo si applicable */}
         {p.prixPromo && Number(p.prixPromo) < Number(p.prix) && (
           <div style={S.promoBadge}>-{Math.round(((p.prix-p.prixPromo)/p.prix)*100)}%</div>
         )}
-        {/* Bouton add rapide */}
         <button
           style={{...S.addBtn, background: outOfStock ? '#e2e8f0' : '#0ea5e9'}}
           disabled={outOfStock}
@@ -255,28 +227,23 @@ function ProductCard({ product: p, onAdd, onClick }) {
         </button>
       </div>
 
-      {/* Infos */}
       <div style={S.cardBody}>
-        {/* Marque */}
         {p.marque && (
           <span style={S.brandTag}><Tag size={9}/> {p.marque}</span>
         )}
 
         <h4 style={S.cardName}>{p.nom}</h4>
 
-        {/* Poids / unité */}
         {(p.poidsVolume || p.unite) && (
           <p style={S.cardSub}>
             {[p.poidsVolume, p.unite ? `par ${p.unite}` : null].filter(Boolean).join(' · ')}
           </p>
         )}
 
-        {/* Référence */}
         {p.reference && (
           <p style={{...S.cardSub, color:'#cbd5e1'}}>Réf. {p.reference}</p>
         )}
 
-        {/* Prix + stock */}
         <div style={S.cardFooter}>
           <div>
             <span style={S.price}>{Number(p.prix).toLocaleString()} F</span>
@@ -294,7 +261,6 @@ function ProductCard({ product: p, onAdd, onClick }) {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const S = {
   root:   { minHeight:'100dvh', background:'#f0f9ff', fontFamily:"'DM Sans',system-ui,sans-serif", paddingBottom:60 },
   header: { background:'#fff', position:'sticky', top:0, zIndex:50, boxShadow:'0 2px 8px rgba(0,0,0,.05)' },

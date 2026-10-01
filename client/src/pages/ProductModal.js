@@ -5,38 +5,13 @@ import {
 } from 'firebase/firestore'; 
 import { X, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
-import CategorieDynamique from '../components/CategorieDynamique';
+import CategorieDynamique, {
+  CATEGORY_FIELDS,
+  normalizeCategoryId,
+} from '../components/CategorieDynamique';
 import { uploadToCloudinary } from '../utils/cloudinary';
 
 // ── Configuration Unifiée des Champs Spécifiques par Catégorie ────────────────
-const CATEGORY_FIELDS = {
-  immobilier: [
-    { id: 'type_immo', label: 'Nature du bien', type: 'select', options: ['Appartement', 'Villa', 'Terrain', 'Bureau', 'Magasin'] },
-    { id: 'transaction', label: 'Type de contrat', type: 'select', options: ['Vente', 'Location', 'Location courte durée'] },
-    { id: 'pieces', label: 'Nombre de pièces', type: 'select', options: ['Studio', '2 pces', '3 pces', '4 pces', '5 pces+'] },
-    { id: 'surface', label: 'Surface (m²)', type: 'text', placeholder: 'Ex: 150' },
-    { id: 'localisation', label: 'Quartier / Zone', type: 'text', placeholder: 'Ex: Riviera 3' }
-  ],
-  vehicule: [ 
-    { id: 'marque_auto', label: 'Marque', type: 'text', placeholder: 'Ex: Toyota' },
-    { id: 'modele_annee', label: 'Modèle & Année', type: 'text', placeholder: 'Ex: Tucson 2018' },
-    { id: 'boite', label: 'Transmission', type: 'select', options: ['Automatique', 'Manuelle'] },
-    { id: 'energie', label: 'Carburant', type: 'select', options: ['Essence', 'Diesel', 'Hybride'] },
-    { id: 'etat_auto', label: 'État actuel', type: 'select', options: ['Dédouané', 'Immatriculé', 'Occasion Europe'] }
-  ],
-  supermarket: [
-    { id: 'marque', label: 'Marque de l\'article', type: 'text', placeholder: 'Ex: Nestlé, Danone...' },
-    { id: 'unite', label: 'Unité de vente (Affiché sur la carte prix)', type: 'select', options: ['Kg', 'Litre', 'Bouteille', 'Paquet', 'Gramme', 'Pièce', 'Canette', 'Pack'] },
-    { id: 'poidsVolume', label: 'Contenance / Volume exact', type: 'text', placeholder: 'Ex: 500g, 1.5L...' },
-    { id: 'conditionnement', label: 'Format de distribution', type: 'text', placeholder: 'Ex: Brique en carton, Plastique Recyclé' },
-    { id: 'temperature', label: 'Condition de Conservation', type: 'select', options: ['Ambiant', 'Frais (0°C à 4°C)', 'Surgelé (-18°C)', 'Sec & Sombre'] },
-    { id: 'datelimit', label: 'Date Limite (DLC / DLUO)', type: 'text', placeholder: 'Ex: Fin Décembre 2026 ou DD/MM/AAAA' },
-    { id: 'allergenes', label: 'Traces d\'allergènes', type: 'text', placeholder: 'Ex: Contient du gluten, lactose, fruits à coque' },
-    { id: 'code_barre', label: 'Code-barres / EAN', type: 'text', placeholder: 'Ex: 3017620422003' },
-    { id: 'reference', label: 'Référence Interne SKU', type: 'text', placeholder: 'Ex: SUP-NET-098' }
-  ]
-};
-
 export default function ProductModal({ vendorId, product, onClose }) {
   const [loading, setLoading] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -71,22 +46,36 @@ export default function ProductModal({ vendorId, product, onClose }) {
   }, [product]);
 
   const handleCategorySelect = (catId) => {
-    setF(prev => ({ 
-      ...prev, 
-      categorie: catId, 
-      type: catId === 'supermarket' ? 'supermarche' : catId,
-      detailsSpecifiques: {} 
+    const id = normalizeCategoryId(catId);
+    setF((prev) => ({
+      ...prev,
+      categorie: id,
+      // DB : supermarche pour historique filtre supermarket
+      type: id === "supermarket" ? "supermarche" : id,
+      detailsSpecifiques: {},
+      // reset champs spécifiques
+      marque: "",
+      unite: "",
+      poidsVolume: "",
+      conditionnement: "",
+      temperature: "",
+      datelimit: "",
+      allergenes: "",
+      code_barre: "",
+      reference: "",
     }));
     setIsDrawerOpen(true);
   };
 
-  const handleSpecChange = (id, value) => {
-    if (f.categorie === 'supermarket') {
-      setF(prev => ({ ...prev, [id]: value }));
+  const handleSpecChange = (fieldId, value) => {
+    const cat = normalizeCategoryId(f.categorie);
+    // Supermarché / resto : champs à la racine du document produit
+    if (cat === "supermarket" || cat === "resto_fastfood") {
+      setF((prev) => ({ ...prev, [fieldId]: value }));
     } else {
-      setF(prev => ({
+      setF((prev) => ({
         ...prev,
-        detailsSpecifiques: { ...prev.detailsSpecifiques, [id]: value }
+        detailsSpecifiques: { ...(prev.detailsSpecifiques || {}), [fieldId]: value },
       }));
     }
   };
@@ -109,19 +98,28 @@ export default function ProductModal({ vendorId, product, onClose }) {
         }
       }
 
+      // Normalisation type : supermarket (UI) → supermarche (DB historique) + alias
+      const normalizedType =
+        f.categorie === "supermarket" ? "supermarche" : (f.categorie || f.type || "boutique");
+
       const payload = {
         nom: f.nom,
         prix: Number(f.prix),
         stock: Number(f.stock) || 0,
         images: uploadedUrls,
+        imageUrl: uploadedUrls[0] || null, // alias pour grilles / détails
         description: f.description || "",
-        categorie: f.categorie,
+        categorie: f.categorie || normalizedType,
+        type: normalizedType,
+        // Double clé vendeur pour ClientHome / Store / ProductGrid
         vendorId: vendorId,
-        updatedAt: serverTimestamp()
+        vendeurId: vendorId,
+        updatedAt: serverTimestamp(),
       };
 
-      if (f.categorie === 'supermarket') {
-        payload.type = 'supermarche';
+      if (normalizeCategoryId(f.categorie) === "supermarket" || normalizedType === "supermarche") {
+        payload.type = "supermarche";
+        payload.categorie = "supermarket"; // filtre marketplace
         payload.marque = f.marque || "";
         payload.unite = f.unite || "";
         payload.poidsVolume = f.poidsVolume || "";
@@ -131,10 +129,9 @@ export default function ProductModal({ vendorId, product, onClose }) {
         payload.allergenes = f.allergenes || "";
         payload.code_barre = f.code_barre || "";
         payload.reference = f.reference || "";
-        payload.detailsSpecifiques = {}; 
+        payload.detailsSpecifiques = {};
       } else {
-        payload.type = f.categorie;
-        payload.detailsSpecifiques = f.detailsSpecifiques;
+        payload.detailsSpecifiques = f.detailsSpecifiques || {};
       }
 
       if (product?.id) {
@@ -182,7 +179,7 @@ export default function ProductModal({ vendorId, product, onClose }) {
               mode="photos-only" 
               images={f.images} 
               setImages={(imgs) => setF(prev => ({ ...prev, images: typeof imgs === 'function' ? imgs(prev.images) : imgs }))}
-              limit={(f.categorie === 'immobilier' || f.categorie === 'vehicule') ? 5 : 1}
+              limit={(normalizeCategoryId(f.categorie) === 'immobilier' || normalizeCategoryId(f.categorie) === 'vehicule') ? 5 : 3}
             />
 
             {/* Infomations Générales Obligatoires de l'Annonce */}
@@ -237,43 +234,18 @@ export default function ProductModal({ vendorId, product, onClose }) {
             </div>
 
             {/* Spécificités Additionnelles selon la Catégorie choisie */}
-            {CATEGORY_FIELDS[f.categorie] && (
-              <div className="m-specs-container" style={{ marginTop: '20px' }}>
-                <div className="m-dynamic-fields-divider">
-                  <span>INFO {f.categorie.toUpperCase()}</span>
-                </div>
-                <div className="m-dynamic-grid">
-                  {CATEGORY_FIELDS[f.categorie].map(field => {
-                    const currentValue = f.categorie === 'supermarket' 
-                      ? (f[field.id] || '') 
-                      : (f.detailsSpecifiques[field.id] || '');
-
-                    return (
-                      <div key={field.id} className="m-input-group-v4">
-                        <label style={{ fontSize: '10px' }}>{field.label}</label>
-                        {field.type === 'select' ? (
-                          <select 
-                            className="m-select-custom"
-                            value={currentValue}
-                            onChange={e => handleSpecChange(field.id, e.target.value)}
-                          >
-                            <option value="">--</option>
-                            {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                          </select>
-                        ) : (
-                          <input 
-                            type="text"
-                            placeholder={field.placeholder}
-                            value={currentValue}
-                            onChange={e => handleSpecChange(field.id, e.target.value)}
-                            style={{ padding: '10px', fontSize: '14px' }}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+            {CATEGORY_FIELDS[normalizeCategoryId(f.categorie)]?.length > 0 && (
+              <CategorieDynamique
+                mode="fields"
+                categorie={f.categorie}
+                fieldValues={
+                  normalizeCategoryId(f.categorie) === "supermarket" ||
+                  normalizeCategoryId(f.categorie) === "resto_fastfood"
+                    ? f
+                    : (f.detailsSpecifiques || {})
+                }
+                onFieldChange={handleSpecChange}
+              />
             )}
           </div>
         )}

@@ -1,16 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom"; 
-import { collection, onSnapshot, query, where, doc, updateDoc } from "firebase/firestore";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { collection, onSnapshot, query, where, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import L from "leaflet";
 import { MapContainer, Marker, Polyline, TileLayer, useMap, Popup } from "react-leaflet";
-import { 
-  X, Navigation, MapPin, Menu, Target, Route, Banknote, Zap, User, Phone, Map, Plus, Minus
-} from "lucide-react"; 
-import { auth, db } from "../firebase"; 
-import { serverTimestamp } from 'firebase/firestore'; // Ajoute serverTimestamp ici si manquant
+import "leaflet/dist/leaflet.css";
+import {
+  X, Menu, Target, Route, Search, MapPin, Banknote, User, Phone
+} from "lucide-react";
+import { auth, db } from "../firebase";
 import { toast } from "react-toastify";
 import "./ClientHome.css";
-import SideNav from "../components/SideNav"; 
+import SideNav from "../components/SideNav";
 import "../components/SideNav.css";
 
 // --- ASSETS ---
@@ -23,7 +23,6 @@ import carSuvImg from "../assets/car-suv.png";
 import taxiConfortImg from "../assets/taxi-confort.png";
 import taxiEcoImg from "../assets/taxi-eco.png";
 import taxiArrangementImg from "../assets/taxi-arrangement.png";
-import taxiCompteurIcon from "../assets/car-taxiCompteur.png";
 import courseVtcIcon from "../assets/courseVtc.png";
 import livraisonMotoIcon from "../assets/livraisonMoto.png";
 import courseMapIcon from "../assets/courseDriverImg.png";
@@ -66,14 +65,28 @@ const SECTORS_CONFIG = {
   jacqueville: { name: "JACQUEVILLE", img: jacquevilleIllustration, isRural: true, dbRole: "livreur-externe", domain: "mambo-jacqueville.ci", redirect: "/livreur-secteur/jacqueville" }
 };
 
+function extractDriverCoords(d) {
+  if (!d) return null;
+  if (d.location?.lat != null && d.location?.lng != null) {
+    return [Number(d.location.lat), Number(d.location.lng)];
+  }
+  if (d.lat != null && d.lng != null) {
+    return [Number(d.lat), Number(d.lng)];
+  }
+  if (d.latitude != null && d.longitude != null) {
+    return [Number(d.latitude), Number(d.longitude)];
+  }
+  return null;
+}
+
 function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; 
+  const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; 
+  return R * c;
 }
 
 function generateElegantCurveRoute(p1, p2) {
@@ -87,18 +100,25 @@ function generateElegantCurveRoute(p1, p2) {
   const offsetLon = (lat1 - lat2) * 0.15;
   const controlLat = midLat + offsetLat;
   const controlLon = midLon + offsetLon;
-  
+
   for (let i = 0; i <= segments; i++) {
     const t = i / segments;
     const currLat = (1 - t) * (1 - t) * lat1 + 2 * (1 - t) * t * controlLat + t * t * lat2;
-    const currLon = (1 - t) * (1 - t) * lon1 + 2 * (1 - t) * t * controlLon + t * t * lat2;
+    const currLon = (1 - t) * (1 - t) * lon1 + 2 * (1 - t) * t * controlLon + t * t * lon2;
     points.push([currLat, currLon]);
   }
   return points;
 }
 
-const getDriverIcon = (driver) => {
-  const vehicleType = (driver?.typeVehicule || "").toLowerCase().trim();
+function estimateDriverEtaMin(userPos, driverCoords) {
+  if (!userPos || !driverCoords) return null;
+  const km = calculateHaversineDistance(userPos[0], userPos[1], driverCoords[0], driverCoords[1]);
+  if (!Number.isFinite(km)) return null;
+  return Math.max(1, Math.ceil((km / 22) * 60));
+}
+
+const getDriverIcon = (driver, etaMin = null) => {
+  const vehicleType = (driver?.typeVehicule || driver?.vehicleType || "").toLowerCase().trim();
   const mode = (driver?.modeVtc || "").toLowerCase().trim();
   let imgSrc = courseMapIcon;
   if (vehicleType === "moto") imgSrc = motoMarkerImg;
@@ -108,11 +128,43 @@ const getDriverIcon = (driver) => {
   } else if (vehicleType === "taxi") {
     imgSrc = mode.includes("confort") ? taxiConfortMapIcon : taxiEcoMapIcon;
   }
-  const size = 40; 
+
+  const timeLabel = etaMin != null ? `~${etaMin} min` : "";
+  const badgeHtml = timeLabel
+    ? `<div style="
+          margin-top:2px;
+          background:#0f172a;
+          color:#fff;
+          font-size:9px;
+          font-weight:800;
+          font-family:system-ui,-apple-system,sans-serif;
+          padding:2px 6px;
+          border-radius:8px;
+          white-space:nowrap;
+          box-shadow:0 2px 6px rgba(0,0,0,0.3);
+          letter-spacing:0.2px;
+          line-height:1.2;
+          border:1.5px solid #10b981;
+        ">${timeLabel}</div>`
+    : "";
+
   return L.divIcon({
-    html: `<div class="pulse-driver"><img src="${imgSrc}" class="driver-img-marker" /></div>`,
-    iconSize: [size, size], 
-    iconAnchor: [size / 2, size / 2],
+    html: `
+      <div style="
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        width:56px;
+        pointer-events:none;
+      ">
+        <div class="pulse-driver" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;">
+          <img src="${imgSrc}" class="driver-img-marker" style="width:36px;height:36px;object-fit:contain;" />
+        </div>
+        ${badgeHtml}
+      </div>
+    `,
+    iconSize: [56, etaMin != null ? 62 : 40],
+    iconAnchor: [28, 20],
     className: "custom-leaflet-icon"
   });
 };
@@ -128,53 +180,146 @@ const clientIcon = L.divIcon({
   iconSize: [20, 20], iconAnchor: [10, 10], className: "custom-leaflet-icon"
 });
 
-const destinationIcon = L.divIcon({
-  html: `<div class="dest-marker-premium"><svg viewBox="0 0 32 40"><path d="M16 0C9.4 0 4 5.4 4 12c0 8 12 28 12 28s12-20 12-28c0-6.6-5.4-12-12-12z" fill="#f35416"/><circle cx="16" cy="12" r="7" fill="white"/></svg></div>`,
-  iconSize: [40, 48], iconAnchor: [20, 48], className: "custom-leaflet-icon"
-});
+function createDestinationIcon(timeLabel) {
+  const badgeHtml = timeLabel
+    ? `<div style="
+          margin-top:4px;
+          background:#0f172a;
+          color:#fff;
+          font-size:10px;
+          font-weight:800;
+          font-family:system-ui,-apple-system,sans-serif;
+          padding:3px 8px;
+          border-radius:10px;
+          white-space:nowrap;
+          box-shadow:0 2px 8px rgba(0,0,0,0.25);
+          letter-spacing:0.2px;
+          line-height:1.2;
+        ">${timeLabel}</div>`
+    : "";
 
-function MapEffect({ a, b, recenterPos }) {
+  return L.divIcon({
+    html: `
+      <div style="
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        width:64px;
+        pointer-events:none;
+      ">
+        <div style="
+          position:relative;
+          width:40px;
+          height:48px;
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+        ">
+          <div style="
+            width:38px;
+            height:38px;
+            border-radius:50%;
+            background:linear-gradient(145deg,#ff6a2b 0%,#e11d48 100%);
+            border:3px solid #fff;
+            box-shadow:0 4px 14px rgba(225,29,72,0.45);
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            z-index:2;
+          ">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 21V3" stroke="white" stroke-width="2.4" stroke-linecap="round"/>
+              <path d="M5 4h12l-3 4 3 4H5" fill="white"/>
+            </svg>
+          </div>
+          <div style="
+            width:0;height:0;
+            border-left:7px solid transparent;
+            border-right:7px solid transparent;
+            border-top:10px solid #e11d48;
+            margin-top:-2px;
+            filter:drop-shadow(0 2px 2px rgba(0,0,0,0.15));
+          "></div>
+        </div>
+        ${badgeHtml}
+      </div>
+    `,
+    iconSize: [64, 78],
+    iconAnchor: [32, 58],
+    className: "custom-leaflet-icon",
+  });
+}
+
+function MapEffect({ a, b, routePoints, recenterPos }) {
   const map = useMap();
   useEffect(() => {
     if (!map) return;
-    map.invalidateSize();
-    if (recenterPos) map.setView(recenterPos, 16, { animate: true });
-    else if (a && b) map.fitBounds(L.latLngBounds([a, b]), { padding: [100, 100], animate: true });
-    else if (a) map.setView(a, 16, { animate: true });
-  }, [a, b, map, recenterPos]);
+    const h = typeof window !== "undefined" ? window.innerHeight : 700;
+    const bottomPad = Math.max(300, Math.round(h * 0.08));
+    const sidePad = 40;
+    const topPad = 130;
+
+    const timer = setTimeout(() => map.invalidateSize({ animate: false }), 150);
+
+    const fitPoints = [];
+    if (Array.isArray(routePoints) && routePoints.length > 1) {
+      routePoints.forEach((p) => {
+        if (Array.isArray(p) && p.length >= 2 && !isNaN(p[0]) && !isNaN(p[1])) fitPoints.push(p);
+      });
+    }
+    if (a && a.length >= 2) fitPoints.push(a);
+    if (b && b.length >= 2) fitPoints.push(b);
+
+    if (fitPoints.length >= 2) {
+      const bounds = L.latLngBounds(fitPoints);
+      map.fitBounds(bounds, {
+        paddingTopLeft: [sidePad, topPad],
+        paddingBottomRight: [sidePad, bottomPad],
+        maxZoom: 15,
+        animate: true,
+      });
+    } else if (recenterPos) {
+      const latOffset = (bottomPad / h) * 0.0008;
+      map.setView([recenterPos[0] - latOffset, recenterPos[1]], 16, { animate: true });
+    } else if (a) {
+      const latOffset = (bottomPad / h) * 0.0008;
+      map.setView([a[0] - latOffset, a[1]], 16, { animate: true });
+    }
+
+    return () => clearTimeout(timer);
+  }, [a, b, routePoints, map, recenterPos]);
   return null;
 }
 
-const AnimatedPrice = ({ value }) => {
-  const [displayValue, setDisplayValue] = useState(0);
-  const prevValueRef = useRef(0);
-  useEffect(() => {
-    let startTime = null;
-    const startValue = prevValueRef.current;
-    const duration = 800;
-    const animate = (now) => {
-      if (!startTime) startTime = now;
-      const progress = Math.min((now - startTime) / duration, 1);
-      const current = Math.floor(startValue + (value - startValue) * progress);
-      setDisplayValue(isNaN(current) ? 0 : current);
-      if (progress < 1) requestAnimationFrame(animate);
-    };
-    requestAnimationFrame(animate);
-    prevValueRef.current = value;
-  }, [value]);
-  return <span>{displayValue.toLocaleString()} F</span>;
+function estimateNearestWaitMin(userPos, drivers) {
+  if (!userPos || !drivers?.length) return null;
+  let bestKm = Infinity;
+  for (const d of drivers) {
+    const c = extractDriverCoords(d);
+    if (!c) continue;
+    const km = calculateHaversineDistance(userPos[0], userPos[1], c[0], c[1]);
+    if (km < bestKm) bestKm = km;
+  }
+  if (!Number.isFinite(bestKm) || bestKm === Infinity) return null;
+  const min = Math.max(1, Math.ceil((bestKm / 22) * 60));
+  return { min, km: bestKm };
+}
+
+const AnimatedPrice = ({ price }) => {
+  return <span className="animated-price">{price} FCFA</span>;
 };
 
 export default function ClientHome() {
   const navigate = useNavigate();
-  const location = useLocation(); 
-  
+  const location = useLocation();
+
   const [currentUser, setCurrentUser] = useState(null);
   const [userData, setUserData] = useState(null);
   const [isSideNavOpen, setIsSideNavOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [userPos, setUserPos] = useState(null);
   const [recenterRequest, setRecenterRequest] = useState(null);
-  const [pickup, setPickup] = useState("Localisation..."); 
+  const [pickup, setPickup] = useState("Localisation...");
   const [dest, setDest] = useState(location.state?.targetDestination || location.state?.targetAddress || location.state?.dropoffAddress || location.state?.destination || "");
   const [destPos, setDestPos] = useState(null);
   const [route, setRoute] = useState([]);
@@ -182,105 +327,88 @@ export default function ClientHome() {
   const [activeFilter, setActiveFilter] = useState("moto");
   const [selectedVehicle, setSelectedVehicle] = useState("MotoNoStress");
   const [onlineDrivers, setOnlineDrivers] = useState([]);
-  const [suggestions, setSuggestions] = useState([]);
-  const [showSearchUI, setShowSearchUI] = useState(false);
-  
+
   const [isRuralMode, setIsRuralMode] = useState(false);
   const [currentSectorKey, setCurrentSectorKey] = useState("abidjan");
   const [showSectorSelector, setShowSectorSelector] = useState(false);
-  const [showNegotiationModal, setShowNegotiationModal] = useState(false);
+  const [showSearchUI, setShowSearchUI] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+
   const [ruralProposedPrices, setRuralProposedPrices] = useState({});
   const [urbanNegoPrice, setUrbanNegoPrice] = useState("");
 
-  const state = location.state || {};
+  const state = useMemo(() => location.state || {}, [location.state]);
   const isTiersFromVendeur = !!state.isTiersOrder || !!state.fromVendeur || !!state.vendeurId;
 
   const [isForThirdParty, setIsForThirdParty] = useState(isTiersFromVendeur);
-  const [thirdPartyName, setThirdPartyName] = useState(
-    state.prefillName || state.clientName || state.nomClient || state.nom || ""
-  );
-  const [thirdPartyPhone, setThirdPartyPhone] = useState(
-    state.prefillPhone || state.telephone || state.clientPhone || state.telephoneClient || ""
-  );
+  const [thirdPartyNameInput, setThirdPartyNameInput] = useState(state.prefillName || state.clientName || state.nomClient || state.nom || "");
+  const [thirdPartyPhoneInput, setThirdPartyPhoneInput] = useState(state.prefillPhone || state.telephone || state.clientPhone || state.telephoneClient || "");
 
   const [internalAlert, setInternalAlert] = useState(null);
-  const [wantClim, setWantClim] = useState(false);
-  const [wantArret, setWantArret] = useState(false);
 
   const configVehicules = useMemo(() => ({
-    MotoNoStress: { base: 1000, km: 0, img: motoNoStressImg, type: "moto", mode: "NoStress", isRural: false, minPrice: 1000 },
-    Moto: { base: 500, km: 170, img: motoImg, type: "moto", mode: "Standard", isRural: false },
+    MotoNoStress: { base: 1000, km: 0, img: motoNoStressImg, type: "moto", mode: "NoStress/24h", isRural: false, minPrice: 1000 },
+    Moto: { base: 500, km: 170, img: motoImg, type: "moto", mode: "Standard/3h", isRural: false },
     MotoChap: { base: 500, km: 210, img: motoChapImg, type: "moto", mode: "ChapChap", isRural: false },
-    VtcEco: { base: 500, km: 300, img: carEcoImg, type: "vtc", mode: "Économique", isRural: false },
-    VtcConfort: { base: 500, km: 350, img: carConfortImg, type: "vtc", mode: "Confort", isRural: false },
-    VtcSuv: { base: 1000, km: 500, img: carSuvImg, type: "vtc", mode: "Prémium", isRural: false },
-    TaxiEco: { base: 375, km: 250, img: taxiEcoImg, type: "taxi", mode: "Compteur", isRural: false },
-    TaxiConfort: { base: 600, km: 400, img: taxiConfortImg, type: "taxi", mode: "Confort", isRural: false },
-    TaxiArrangement: { base: 0, km: 0, img: taxiArrangementImg, type: "taxi", mode: "Négociable", isArrangement: true, minPrice: 1000, isRural: false },
+    VtcEco: { base: 2500, km: 500, img: carEcoImg, type: "vtc", mode: "Cargo mini", isRural: false },
+    VtcConfort: { base: 3500, km: 500, img: carConfortImg, type: "vtc", mode: "Cargo", isRural: false },
+    VtcSuv: { base: 4500, km: 600, img: carSuvImg, type: "vtc", mode: "Camion", isRural: false },
+    
+    TaxiEco: { base: 100, km: 0, img: taxiEcoImg, type: "taxi", mode: "Piéton", isRural: false, fixedRule: true, maxDist: 2 },
+    TaxiConfort: { base: 100, km: 0, img: taxiConfortImg, type: "taxi", mode: "Bicyclette", isRural: false, fixedRule: true, maxDist: 2 },
+
+    TaxiArrangement: { base: 0, km: 0, img: taxiArrangementImg, type: "taxi", mode: "Négociable", isArrangement: true, minPrice: 2000, isRural: false },
+    
     moto: { base: 300, km: 200, img: imgMoto, type: "moto", mode: "Moto", isRural: true },
     saloni: { base: 500, km: 150, img: imgSaloni, type: "vtc", mode: "Saloni", isRural: true },
     antara: { base: 1000, km: 200, img: imgAntara, type: "vtc", mode: "Antara", isRural: true },
-    vtc: { base: 500, km: 250, img: imgVtc, type: "vtc", mode: "VTC Rural", isRural: true }
+    vtc: { base: 500, km: 250, img: imgVtc, type: "vtc", mode: "VTC Rural", isRural: true },
+    
+    RuralPieton: { base: 100, km: 0, img: taxiEcoImg, type: "taxi", mode: "Piéton", isRural: true, fixedRule: true, maxDist: 2 },
+    RuralBicyclette: { base: 100, km: 0, img: taxiConfortImg, type: "taxi", mode: "Bicyclette", isRural: true, fixedRule: true, maxDist: 2 }
   }), []);
 
   const currentSectorData = useMemo(() => {
     return SECTORS_CONFIG[currentSectorKey] || { name: currentSectorKey.toUpperCase(), img: alepeIllustration, isRural: true, dbRole: "livreur-externe" };
   }, [currentSectorKey]);
 
-  const dynamicUI = useMemo(() => {
-    const cityName = currentSectorData.name;
-    const isFromVendeur = isTiersFromVendeur;
-
-    const maps = {
-      moto: { 
-        title: isRuralMode ? `Livreur ${cityName}` : "Livraison de Colis", 
-        placeholder: "Où livrer ?", 
-        thirdPartyLabel: isFromVendeur ? "Client" : "Passager", 
-        btnLabel: "LIEU DE LIVRAISON" 
-      },
-      taxi: { 
-        title: "Taxi & Négos", 
-        placeholder: "Où allez-vous ?", 
-        thirdPartyLabel: isFromVendeur ? "Client" : "Passager", 
-        btnLabel: "DESTINATION" 
-      },
-      vtc: { 
-        title: isRuralMode ? `Chauffeur ${cityName}` : "Ma Course VTC", 
-        placeholder: "Votre destination ?", 
-        thirdPartyLabel: isFromVendeur ? "Client" : "Passager", 
-        btnLabel: "DESTINATION" 
-      }
-    };
-    return maps[activeFilter] || maps.vtc;
-  }, [activeFilter, isRuralMode, currentSectorData, isTiersFromVendeur]);
-
   const getPrice = useCallback((vId) => {
     const v = configVehicules[vId];
     if (!v) return 0;
-    
+
+    if (v.fixedRule) {
+      if (distanceKm <= 1.5) {
+        return 100;
+      } else {
+        const extraKm = distanceKm - 1.5;
+        const halfKmUnits = Math.ceil(extraKm / 0.5);
+        return 100 + (halfKmUnits * 50);
+      }
+    }
+
     if (v.isArrangement) {
-      if (urbanNegoPrice && parseInt(urbanNegoPrice) > 0) return parseInt(urbanNegoPrice);
-      const ecoVehicleId = vId.replace("Nego", "Eco"); 
+      if (urbanNegoPrice && parseInt(urbanNegoPrice, 10) > 0) return parseInt(urbanNegoPrice, 10);
+      const ecoVehicleId = vId.includes("Arrangement") ? "TaxiEco" : vId.replace("Nego", "Eco");
       const ecoVehicle = configVehicules[ecoVehicleId];
       if (ecoVehicle) {
         let ecoPrice = ecoVehicle.base;
         if (distanceKm > 0 && distanceKm < 4) {
-          ecoPrice += distanceKm * 300;
+          ecoPrice += distanceKm * 500;
         } else {
           ecoPrice += distanceKm * (ecoVehicle.km || 0);
         }
         return Math.ceil(ecoPrice / 100) * 100;
       }
-      return v.minPrice || 1000;
+      return v.minPrice || 2000;
     }
 
     let finalPrice = v.base;
     if (distanceKm > 0 && distanceKm < 5) {
       let smoothKmPrice = v.km || 0;
-      if (vId === "VtcEco" || vId === "TaxiEco") smoothKmPrice = 200; 
-      else if (vId === "VtcConfort" || vId === "TaxiConfort") smoothKmPrice = 240;
+      if (vId === "VtcEco") smoothKmPrice = 200;
+      else if (vId === "VtcConfort") smoothKmPrice = 240;
       else if (vId === "VtcSuv") smoothKmPrice = 300;
-      else if (vId === "Moto" || vId === "MotoChap") smoothKmPrice = 150;
+      else if (vId === "Moto" || vId === "MotoChap" || vId === "moto") smoothKmPrice = 150;
       finalPrice += distanceKm * smoothKmPrice;
     } else {
       finalPrice += distanceKm * (v.km || 0);
@@ -288,15 +416,41 @@ export default function ClientHome() {
     return Math.ceil(finalPrice / 100) * 100;
   }, [configVehicules, distanceKm, urbanNegoPrice]);
 
-  // Force MotoNoStress + géocodage destination pour commande tiers
+  useEffect(() => {
+    if (distanceKm > 2) {
+      if (selectedVehicle === "TaxiEco" || selectedVehicle === "TaxiConfort" || selectedVehicle === "RuralPieton" || selectedVehicle === "RuralBicyclette") {
+        setSelectedVehicle(isRuralMode ? "moto" : "MotoNoStress");
+        toast.info("Distance supérieure à 2 km : basculement automatique sur la Moto.", { autoClose: 3000 });
+      }
+    } else if (distanceKm >= 5 && !isRuralMode) {
+      if (selectedVehicle === "TaxiEco" || selectedVehicle === "TaxiConfort") {
+        setSelectedVehicle("MotoNoStress");
+        toast.info("Distance supérieure ou égale à 5 km : basculement automatique sur la Moto.", { autoClose: 3000 });
+      }
+    }
+  }, [distanceKm, selectedVehicle, isRuralMode]);
+
+  useEffect(() => {
+    const baseCalculatedPrice = getPrice(selectedVehicle);
+    if (isRuralMode) {
+      setRuralProposedPrices(prev => ({
+        ...prev,
+        [selectedVehicle]: prev[selectedVehicle] !== undefined ? prev[selectedVehicle] : baseCalculatedPrice
+      }));
+    } else if (configVehicules[selectedVehicle]?.isArrangement) {
+      if (!urbanNegoPrice) {
+        setUrbanNegoPrice(baseCalculatedPrice.toString());
+      }
+    }
+  }, [selectedVehicle, distanceKm, isRuralMode, getPrice, configVehicules, urbanNegoPrice]);
+
   useEffect(() => {
     if (isTiersFromVendeur) {
       setSelectedVehicle("MotoNoStress");
       setActiveFilter("moto");
       toast.info("🚀 Mode Tiers activé - Moto NoStress (1000 F) sélectionnée par défaut", { autoClose: 4000 });
 
-      // Géocodage automatique de la destination si elle est pré-remplie
-      const prefilledDest = location.state?.targetDestination || location.state?.destination || location.state?.dropoffAddress;
+      const prefilledDest = state?.targetDestination || state?.destination || state?.dropoffAddress;
       if (prefilledDest && !destPos) {
         (async () => {
           try {
@@ -315,68 +469,166 @@ export default function ClientHome() {
         })();
       }
     }
-  }, [isTiersFromVendeur, location.state, destPos]);
+  }, [isTiersFromVendeur, state, destPos]);
 
   useEffect(() => {
     let unsubProfile = null;
-    let unsubDrivers = null;
-  
-    const unsubAuth = auth.onAuthStateChanged(u => {
+    let isMounted = true;
+
+    const unsubAuth = auth.onAuthStateChanged((u) => {
+      if (!isMounted) return;
       setCurrentUser(u);
-      if (unsubProfile) { unsubProfile(); unsubProfile = null; }
-      if (unsubDrivers) { unsubDrivers(); unsubDrivers = null; }
-  
-      if (u) {
-        unsubProfile = onSnapshot(doc(db, "users", u.uid), (s) => {
-          if (s.exists()) setUserData(s.data());
-        });
+
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
       }
-  
-      const q = query(
-        collection(db, "users"),
-        where("isOnline", "==", true),
-        where("role", "in", ["livreur", "livreur-externe"])
-      );
-  
-      unsubDrivers = onSnapshot(q, (s) => {
-        setOnlineDrivers(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(d => d.lat && d.lng));
-      });
+
+      if (u) {
+        unsubProfile = onSnapshot(
+          doc(db, "users", u.uid),
+          (s) => {
+            if (!isMounted) return;
+            if (s.exists()) setUserData(s.data());
+          },
+          (err) => console.warn("Profil snapshot:", err?.message || err)
+        );
+      } else {
+        setUserData(null);
+      }
     });
-  
+
     return () => {
+      isMounted = false;
       unsubAuth();
       if (unsubProfile) unsubProfile();
-      if (unsubDrivers) unsubDrivers();
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const q = query(
+      collection(db, "users"),
+      where("isOnline", "==", true),
+      where("role", "in", ["livreur", "livreur-externe"])
+    );
+
+    const unsubDrivers = onSnapshot(
+      q,
+      (s) => {
+        if (!isMounted) return;
+        setOnlineDrivers(
+          s.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((d) => extractDriverCoords(d) !== null)
+        );
+      },
+      (err) => console.warn("Drivers snapshot:", err?.message || err)
+    );
+
+    return () => {
+      isMounted = false;
+      unsubDrivers();
     };
   }, []);
 
   const sanitizeKey = (str) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 
+  const buildPickupLabel = (addr, displayName) => {
+    if (!addr && !displayName) return null;
+    const a = addr || {};
+    const road = a.road || a.pedestrian || a.path || a.residential || a.neighbourhood;
+    const area = a.suburb || a.quarter || a.city_district || a.village || a.town;
+    const city = a.city || a.municipality || a.county;
+    const parts = [road, area, city].filter(Boolean);
+    if (parts.length > 0) {
+      const unique = [];
+      for (const p of parts) {
+        if (!unique.some((u) => u.toLowerCase() === p.toLowerCase())) unique.push(p);
+      }
+      return unique.slice(0, 2).join(", ");
+    }
+    if (displayName) {
+      return displayName.split(",").slice(0, 2).map((s) => s.trim()).join(", ");
+    }
+    return null;
+  };
+
   useEffect(() => {
+    let cancelled = false;
+
     navigator.geolocation.getCurrentPosition(
       async (p) => {
         const coords = [p.coords.latitude, p.coords.longitude];
+        if (cancelled) return;
         setUserPos(coords);
+
+        let label = null;
+        let cityKey = "";
+
         try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords[0]}&lon=${coords[1]}`);
-          const d = await res.json();
-          setPickup(d.address?.road || d.address?.suburb || "Ma position");
-
-          let cityKey = sanitizeKey(d.address?.town || d.address?.village || d.address?.city || "");
-          if (cityKey.includes("memni") || cityKey.includes("alepe")) cityKey = "alepe";
-          else if (cityKey.includes("azaguie")) cityKey = "azaguie";
-
-          if (cityKey && SECTORS_CONFIG[cityKey]) {
-            setCurrentSectorKey(cityKey);
-            setIsRuralMode(SECTORS_CONFIG[cityKey].isRural);
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords[0]}&lon=${coords[1]}&zoom=18&addressdetails=1&accept-language=fr`,
+            { headers: { "Accept-Language": "fr" } }
+          );
+          if (res.ok) {
+            const d = await res.json();
+            label = buildPickupLabel(d.address, d.display_name);
+            cityKey = sanitizeKey(
+              d.address?.town || d.address?.village || d.address?.city || d.address?.suburb || ""
+            );
           }
         } catch (e) {
-          setPickup("Position active (GPS)");
+          console.warn("Nominatim reverse:", e);
+        }
+
+        if (!label) {
+          try {
+            const pr = await fetch(
+              `https://photon.komoot.io/reverse?lat=${coords[0]}&lon=${coords[1]}&lang=fr`
+            );
+            if (pr.ok) {
+              const pd = await pr.json();
+              const feat = pd?.features?.[0];
+              const props = feat?.properties || {};
+              const parts = [props.name, props.street, props.district, props.city]
+                .filter(Boolean);
+              const unique = [];
+              for (const x of parts) {
+                if (!unique.some((u) => u.toLowerCase() === x.toLowerCase())) unique.push(x);
+              }
+              label = unique.slice(0, 2).join(", ") || null;
+              if (!cityKey) cityKey = sanitizeKey(props.city || props.district || "");
+            }
+          } catch (e) {
+            console.warn("Photon reverse:", e);
+          }
+        }
+
+        if (cancelled) return;
+
+        setPickup(label || `GPS ${coords[0].toFixed(4)}, ${coords[1].toFixed(4)}`);
+
+        if (cityKey.includes("memni") || cityKey.includes("alepe")) cityKey = "alepe";
+        else if (cityKey.includes("azaguie")) cityKey = "azaguie";
+        else if (cityKey.includes("abidjan") || cityKey.includes("cocody") || cityKey.includes("yopougon") || cityKey.includes("abobo") || cityKey.includes("marcory") || cityKey.includes("plateau")) {
+          cityKey = "abidjan";
+        }
+
+        if (cityKey && SECTORS_CONFIG[cityKey]) {
+          setCurrentSectorKey(cityKey);
+          setIsRuralMode(SECTORS_CONFIG[cityKey].isRural);
         }
       },
-      () => setInternalAlert({ type: 'error', message: 'GPS requis' }),
+      () => {
+        if (!cancelled) setInternalAlert({ type: "error", message: "GPS requis" });
+      },
       CONFIG.GEOLOCATION_OPTIONS
     );
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -397,37 +649,134 @@ export default function ClientHome() {
     }
   }, [userPos, destPos]);
 
-  const handleToggleZone = () => setShowSectorSelector(true);
+  const formatSuggestionLabel = (item) => {
+    const main = (item.name || item.display_name?.split(",")[0] || "Lieu").trim();
+    const parts = (item.display_name || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const skip = /côte d.?ivoire|ivory coast|^\d{4,}$/i;
+    const secondaryFromParts = parts
+      .slice(1)
+      .filter((p) => !skip.test(p) && p.toLowerCase() !== main.toLowerCase())
+      .slice(0, 2)
+      .join(" · ");
+    const secondaryPhoton = [item.street, item.district, item.city, item.suburb]
+      .filter(Boolean)
+      .filter((p) => p.toLowerCase() !== main.toLowerCase())
+      .slice(0, 2)
+      .join(" · ");
+    return { main, secondary: secondaryPhoton || secondaryFromParts };
+  };
+
+  const fetchSuggestions = async (input) => {
+    if (!input || input.length < CONFIG.SUGGESTION_MIN_CHARS) {
+      setSuggestions([]);
+      return;
+    }
+    try {
+      const sectorName = currentSectorData?.name || "Abidjan";
+      const biasLat = userPos?.[0] ?? CONFIG.DEFAULT_CENTER[0];
+      const biasLon = userPos?.[1] ?? CONFIG.DEFAULT_CENTER[1];
+      const qRaw = input.trim();
+      const qEnriched = `${qRaw} ${sectorName}`;
+
+      const photonParams = new URLSearchParams({
+        q: qRaw,
+        lat: String(biasLat),
+        lon: String(biasLon),
+        limit: "12",
+        lang: "fr",
+      });
+      photonParams.set("bbox", "-8.6,4.2,-2.5,10.7");
+
+      const photonRes = await fetch(`https://photon.komoot.io/api/?${photonParams}`);
+      const photonData = await photonRes.json();
+      const fromPhoton = (photonData?.features || []).map((f) => {
+        const p = f.properties || {};
+        const [lon, lat] = f.geometry?.coordinates || [];
+        const name = p.name || p.street || "Lieu";
+        const display = [name, p.street, p.district, p.city, p.country]
+          .filter(Boolean)
+          .join(", ");
+        return {
+          lat: String(lat),
+          lon: String(lon),
+          name,
+          display_name: display,
+          street: p.street,
+          district: p.district || p.suburb,
+          city: p.city || p.county,
+          suburb: p.suburb,
+          osm_value: p.osm_value,
+          class: p.osm_key,
+          type: p.osm_value,
+        };
+      });
+
+      let fromNominatim = [];
+      try {
+        const nomParams = new URLSearchParams({
+          format: "json",
+          q: qEnriched,
+          countrycodes: "ci",
+          limit: "10",
+          addressdetails: "1",
+          "accept-language": "fr",
+        });
+        nomParams.set("viewbox", "-4.20,5.50,-3.80,5.20");
+        nomParams.set("bounded", "0");
+
+        const nomRes = await fetch(`https://nominatim.openstreetmap.org/search?${nomParams}`, {
+          headers: { "Accept-Language": "fr" },
+        });
+        fromNominatim = await nomRes.json();
+      } catch (e) {
+        console.warn("Nominatim fallback:", e);
+      }
+
+      const seen = new Set();
+      const cleaned = [];
+      for (const item of [...fromPhoton, ...(fromNominatim || [])]) {
+        if (!item.lat || !item.lon) continue;
+        const label = formatSuggestionLabel(item);
+        if (!label.main || label.main.length < 2) continue;
+        const key = `${label.main}|${label.secondary}`.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        cleaned.push({ ...item, _label: label });
+        if (cleaned.length >= 12) break;
+      }
+
+      setSuggestions(cleaned);
+    } catch (e) {
+      console.error("Recherche lieu:", e);
+      setSuggestions([]);
+    }
+  };
+
+  const handleSelectSuggestion = (item) => {
+    const label = item._label || formatSuggestionLabel(item);
+    setDest(label.main);
+    const newDestPos = [parseFloat(item.lat), parseFloat(item.lon)];
+    setDestPos(newDestPos);
+    setRecenterRequest(null);
+    setSuggestions([]);
+    setShowSearchUI(false);
+  };
 
   const selectRuralSector = (key) => {
-    const targetSector = SECTORS_CONFIG[key];
     setCurrentSectorKey(key);
-    setIsRuralMode(targetSector.isRural);
-    setActiveFilter("vtc");
-    setSelectedVehicle(targetSector.isRural ? "saloni" : "VtcEco");
+    setIsRuralMode(SECTORS_CONFIG[key].isRural);
     setShowSectorSelector(false);
-    toast.info(`Zone activée : ${targetSector.name}`);
-  };
-
-  const handleKeyboardNegoRural = (value) => {
-    const targetAmount = parseInt(value) || 0;
-    setRuralProposedPrices(prev => ({ ...prev, [selectedVehicle]: targetAmount }));
-  };
-
-  const handleQuickPriceRural = (amount) => {
-    const baseInitial = getPrice(selectedVehicle);
-    const currentProposal = ruralProposedPrices[selectedVehicle] || baseInitial;
-    handleKeyboardNegoRural(currentProposal + amount);
-  };
-
-  const handleStepPriceRural = (direction) => {
-    const baseInitial = getPrice(selectedVehicle);
-    const currentProposal = ruralProposedPrices[selectedVehicle] || baseInitial;
-    const step = direction === "up" ? 100 : -100;
-    const nextProposal = currentProposal + step;
-    if (nextProposal >= configVehicules[selectedVehicle].base) {
-      handleKeyboardNegoRural(nextProposal);
+    if (SECTORS_CONFIG[key].isRural) {
+      const ruralVehicles = Object.keys(configVehicules).filter(k => configVehicules[k].isRural);
+      if (ruralVehicles.length > 0) setSelectedVehicle(ruralVehicles[0]);
+    } else {
+      setSelectedVehicle("MotoNoStress");
+      setActiveFilter("moto");
     }
+  };
+
+  const getDynamicPlaceholder = () => {
+    return "Où livrer ?";
   };
 
   const handleCommand = () => {
@@ -435,19 +784,34 @@ export default function ClientHome() {
 
     const v = configVehicules[selectedVehicle];
 
-    if (isForThirdParty && (!thirdPartyName || !thirdPartyPhone)) {
+    if (isForThirdParty && (!thirdPartyNameInput || !thirdPartyPhoneInput)) {
       return setInternalAlert({ type: 'warning', message: 'Veuillez remplir les infos du tiers' });
     }
 
     const calculatedPrice = getPrice(selectedVehicle);
-    const proposedPrice = isRuralMode ? (ruralProposedPrices[selectedVehicle] || calculatedPrice) : calculatedPrice;
+    const proposedPrice = isRuralMode
+      ? (ruralProposedPrices[selectedVehicle] !== undefined ? ruralProposedPrices[selectedVehicle] : calculatedPrice)
+      : (v.isArrangement && urbanNegoPrice ? parseInt(urbanNegoPrice, 10) : calculatedPrice);
 
+    const pickupAddress =
+      (isTiersFromVendeur && (state.departAdresse || state.pickupAddress))
+        ? (state.departAdresse || state.pickupAddress)
+        : pickup;
+
+    // --- CORRECTION DE LA REDIRECTION ---
+    // Si c'est un vendeur qui passe la commande tiers (isTiersFromVendeur == true) OU une commande classique,
+    // le vendeur/utilisateur est bien redirigé vers la confirmation pour lancer/suivre la course.
+    
     navigate("/confirmation", {
       state: {
-        orderId: state.orderId || null, 
-        pickupAddress: pickup,
+        orderId: state.orderId || null,
+        vendeurId: state.vendeurId || null,
+        assignedCoursierId: state.vendeurId || null,
+        pickupAddress,
+        departAdresse: state.departAdresse || pickupAddress,
         destination: dest,
         dropoffAddress: dest,
+        targetDestination: dest,
         pickupLocation: userPos ? { lat: userPos[0], lng: userPos[1] } : null,
         dropoffLocation: destPos ? { lat: destPos[0], lng: destPos[1] } : null,
         distanceKm,
@@ -455,138 +819,180 @@ export default function ClientHome() {
         mode: v.mode,
         price: calculatedPrice,
         proposedPrice,
+        estimatedPrice: calculatedPrice,
+        isCompteur: false,
+        baseFare: null,
         isForThirdParty,
-        clientName: thirdPartyName,
-        clientPhone: thirdPartyPhone,
-        thirdPartyName,
-        thirdPartyPhone,
-        isNegoActive: isRuralMode ? (ruralProposedPrices[selectedVehicle] != null && ruralProposedPrices[selectedVehicle] !== calculatedPrice) : v.isArrangement,
-        wantClim,
-        wantArret,
+        clientName: thirdPartyNameInput,
+        clientPhone: thirdPartyPhoneInput,
+        thirdPartyName: thirdPartyNameInput,
+        thirdPartyPhone: thirdPartyPhoneInput,
+        prefillName: thirdPartyNameInput,
+        prefillPhone: thirdPartyPhoneInput,
+        isNegoActive: isRuralMode
+          ? (ruralProposedPrices[selectedVehicle] !== undefined && ruralProposedPrices[selectedVehicle] !== calculatedPrice)
+          : !!v.isArrangement,
+        wantArret: false,
         isTiersOrder: isForThirdParty,
         fromVendeur: isTiersFromVendeur,
       }
     });
   };
+  // Fonction pour hacher/masquer le nom et le téléphone
+const maskData = (value, type = "text") => {
+  if (!value) return "";
+  if (type === "phone") {
+    // Affiche seulement les 2 premiers et 2 derniers chiffres (ex: 07****34)
+    const cleaned = value.toString().trim();
+    if (cleaned.length <= 4) return "****";
+    return `${cleaned.slice(0, 2)}****${cleaned.slice(-2)}`;
+  } else {
+    // Affiche la première lettre et masque le reste (ex: K***)
+    const parts = value.toString().trim().split(" ");
+    return parts
+      .map((part) => (part.length > 1 ? `${part[0]}***` : part))
+      .join(" ");
+  }
+};
 
-  const fetchSuggestions = useCallback((val) => {
-    if (val.length < CONFIG.SUGGESTION_MIN_CHARS) return;
-    setTimeout(async () => {
-      try {
-        const lowerVal = val.toLowerCase().trim();
-        let querySuffix = " Abidjan, Côte d'Ivoire";
-        
-        if (lowerVal.includes("alepe") || lowerVal.includes("alépé") || lowerVal.includes("memni")) {
-          querySuffix = " Alépé, Côte d'Ivoire";
-        } else if (lowerVal.includes("azaguie") || lowerVal.includes("azaguié")) {
-          querySuffix = " Azaguié, Côte d'Ivoire";
-        } else if (isRuralMode) {
-          querySuffix = ` ${currentSectorData.name}, Côte d'Ivoire`;
-        }
-
-        const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(val + querySuffix)}&limit=6`);
-        if (!res.ok) return;
-        const d = await res.json();
-        if (!d.features) return;
-        setSuggestions(d.features.map(f => ({
-          name: f.properties.name || f.properties.street || "Lieu inconnu",
-          district: f.properties.district || f.properties.city || f.properties.county || "",
-          fullAddress: `${f.properties.name || ""}${f.properties.district ? ", " + f.properties.district : (f.properties.city ? ", " + f.properties.city : "")}`,
-          coords: [f.geometry.coordinates[1], f.geometry.coordinates[0]]
-        })));
-      } catch (e) { console.error("Erreur suggestions:", e); }
-    }, CONFIG.DEBOUNCE_DELAY);
-  }, [isRuralMode, currentSectorData]);
-
-  const handleSelectSuggestion = (sug) => {
-    setDest(sug.name);
-    setDestPos(sug.coords);
-    setSuggestions([]);
-    setShowSearchUI(false);
-  };
-  
-  // Système d'écoute des messages In-App temps réel pour la page Client
+  // --- ÉCOUTE DES MESSAGES IN-APP (RÉSOLUTION EXPERTE DU PROBLÈME) ---
   useEffect(() => {
-    if (!auth.currentUser) return;
+    if (!currentUser?.uid) return;
     let isMounted = true;
 
-    const messagesQuery = query(
-      collection(db, "in_app_messages"),
-      where("recipientId", "==", auth.currentUser.uid),
-      where("status", "==", "unread")
+    const unreadQuery = query(
+      collection(db, "inAppMessages"),
+      where("receiverId", "==", currentUser.uid),
+      where("read", "==", false)
     );
 
-    const unsubscribeInApp = onSnapshot(messagesQuery, (snapshot) => {
-      if (!isMounted) return;
-      snapshot.docs.forEach(async (messageDoc) => {
-        const messageData = messageDoc.data();
-        
-        // Affichage de l'alerte locale via le toast de la page
-        toast.info(messageData.body || "Nouveau message reçu", { autoClose: 5000 });
+    const unsubscribeInApp = onSnapshot(
+      unreadQuery,
+      (snapshot) => {
+        if (!isMounted) return;
 
-        try {
-          // Passage immédiat du statut à "read" pour couper les boucles de doublons
-          await updateDoc(doc(db, "in_app_messages", messageDoc.id), {
-            status: "read",
-            readAt: new Date()
-          });
-        } catch (err) {
-          console.error("Erreur mise à jour statut message In-App:", err);
-        }
-      });
-    });
+        // Met à jour le nombre de messages non lus sur l'icône de navigation
+        setUnreadCount(snapshot.size);
+
+        // Analyse les modifications et notifie l'utilisateur via toast
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const msgData = change.doc.data();
+
+            if (!msgData.notified) {
+              const messageText =
+                msgData.text ||
+                msgData.message ||
+                msgData.body ||
+                "Nouveau message reçu";
+
+              toast.info(`📩 ${messageText}`, {
+                position: "top-right",
+                autoClose: 5000,
+                hideProgressBar: false,
+                closeOnClick: true,
+                pauseOnHover: true,
+                draggable: true,
+              });
+
+              // Marquer comme notifié afin d'éviter la réémission du toast lors des re-renders
+              updateDoc(doc(db, "inAppMessages", change.doc.id), {
+                notified: true,
+              }).catch(() => {});
+            }
+          }
+        });
+      },
+      (err) => {
+        if (err?.code === "permission-denied") return;
+        console.warn("Erreur d'écoute de la collection inAppMessages:", err?.code || err?.message || err);
+      }
+    );
 
     return () => {
       isMounted = false;
       unsubscribeInApp();
     };
-  }, []);
+  }, [currentUser?.uid]);
 
-// Extraction de la variable pour validation statique par ESLint
-  const fcmUserKey = typeof currentUser !== 'undefined' ? currentUser?.uid : '';
+  const fcmUserKey = currentUser?.uid || "";
 
-  // Listener Firebase Cloud Messaging (Notifications Push pour Client)
   useEffect(() => {
     if (!fcmUserKey) return;
 
     const requestPushPermission = async () => {
       try {
-        const { getMessaging, getToken } = await import('firebase/messaging');
+        if (typeof window === "undefined") return;
+        if (!("Notification" in window) || !("serviceWorker" in navigator)) return;
+        if (!window.isSecureContext) return;
+
+        const { getMessaging, getToken, isSupported } = await import("firebase/messaging");
+        const supported = await isSupported().catch(() => false);
+        if (!supported) return;
+
+        let permission = Notification.permission;
+        if (permission === "default") {
+          permission = await Notification.requestPermission();
+        }
+        if (permission !== "granted") return;
+
         const messaging = getMessaging();
-        
-        const permission = await Notification.requestPermission();
-        
-        if (permission === 'granted') {
-          const currentToken = await getToken(messaging, { 
-            vapidKey: 'BDE5b26fkUCHbCy7IzjX30eDjJpfQev7GWOrKc6yJxUV48L0XInKEd2urQwzuqUgjQ5UAfP9EcvZ3gtXYI52oII' 
-          });
-          
-          if (currentToken) {
-            await updateDoc(doc(db, "users", fcmUserKey), {
-              fcmToken: currentToken,
-              updatedAt: serverTimestamp()
-            });
-          } else {
-            console.warn('Aucun jeton d\'enregistrement disponible pour le client.');
-          }
-        } else {
-          console.warn('Permission de notification refusée par le client.');
+        const currentToken = await getToken(messaging, {
+          vapidKey:
+            "BDE5b26fkUCHbCy7IzjX30eDjJpfQev7GWOrKc6yJxUV48L0XInKEd2urQwzuqUgjQ5UAfP9EcvZ3gtXYI52oII",
+        });
+
+        if (currentToken) {
+          await updateDoc(doc(db, "users", fcmUserKey), {
+            fcmToken: currentToken,
+            notificationsEnabled: true,
+            lastTokenUpdate: serverTimestamp(),
+          }).catch(() => {});
         }
       } catch (err) {
-        console.error('Erreur lors de la configuration des notifications Push FCM Client :', err);
+        if (err?.name === "AbortError" || /push service/i.test(String(err?.message || ""))) {
+          return;
+        }
+        console.warn("FCM client (non bloquant):", err?.code || err?.message || err);
       }
     };
 
     requestPushPermission();
   }, [fcmUserKey]);
 
-  
+  const dynamicUI = useMemo(() => {
+    const list = Object.keys(configVehicules)
+      .filter(k => {
+        if (isRuralMode) {
+          return configVehicules[k].isRural;
+        } else {
+          return !configVehicules[k].isRural && configVehicules[k].type === activeFilter;
+        }
+      })
+      .map(k => {
+        const item = configVehicules[k];
+        let isDisabled = false;
+        if (distanceKm > 2 && (k === "TaxiEco" || k === "TaxiConfort" || k === "RuralPieton" || k === "RuralBicyclette")) {
+          isDisabled = true;
+        } else if (!isRuralMode) {
+          if (k === "TaxiEco" && distanceKm > 2) isDisabled = true;
+          if (k === "TaxiConfort" && distanceKm > 4) isDisabled = true;
+        }
+        return { key: k, ...item, isDisabled };
+      });
+    return list;
+  }, [configVehicules, isRuralMode, activeFilter, distanceKm]);
+
+  const nearestWait = useMemo(
+    () => estimateNearestWaitMin(userPos, onlineDrivers),
+    [userPos, onlineDrivers]
+  );
 
   return (
     <div className="client-home">
       {internalAlert && (
         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[9999] px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 text-xs font-black animate-in fade-in slide-in-from-top-4 duration-200 ${
-          internalAlert.type === 'error' ? 'bg-red-600 text-white' : 
+          internalAlert.type === 'error' ? 'bg-red-600 text-white' :
           internalAlert.type === 'warning' ? 'bg-amber-500 text-white' : 'bg-slate-900 text-white'
         }`}>
           <span>{internalAlert.message}</span>
@@ -598,275 +1004,304 @@ export default function ClientHome() {
         <div className="client-dot-small"></div>
         <span>{pickup}</span>
       </div>
-      
+
       <div className="home-header">
-        <button className="menu-btn" onClick={() => setIsSideNavOpen(true)}><Menu size={24} /></button>
+        <button className="relative menu-btn" onClick={() => setIsSideNavOpen(true)}>
+          <Menu size={24} />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white animate-pulse">
+              {unreadCount}
+            </span>
+          )}
+        </button>
         {distanceKm > 0 && <div className="distance-badge-top"><Route size={14} /><span>{distanceKm.toFixed(1)} km</span></div>}
       </div>
-      
-      <SideNav isOpen={isSideNavOpen} onClose={() => setIsSideNavOpen(false)} currentUser={currentUser} userData={userData} />
+
+      <SideNav 
+        isOpen={isSideNavOpen} 
+        onClose={() => setIsSideNavOpen(false)} 
+        currentUser={currentUser} 
+        userData={userData} 
+        unreadCount={unreadCount} 
+      />
 
       <div className="map-fullscreen">
-        <MapContainer center={CONFIG.DEFAULT_CENTER} zoom={CONFIG.DEFAULT_ZOOM} zoomControl={false} style={{ height: '100%', width: '100%' }}>
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-          {onlineDrivers.map(d => <Marker key={d.id} position={[Number(d.lat), Number(d.lng)]} icon={getDriverIcon(d)} />)}
+        <MapContainer center={CONFIG.DEFAULT_CENTER} zoom={CONFIG.DEFAULT_ZOOM} zoomControl={false} style={{ height: "100%", width: "100%" }}>
+          <TileLayer 
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" 
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          />
+          {onlineDrivers.map(d => {
+            const coords = extractDriverCoords(d);
+            if (!coords) return null;
+            const etaMin = userPos ? estimateDriverEtaMin(userPos, coords) : null;
+            return (
+              <Marker
+                key={`drv-${d.id}-${etaMin ?? "x"}`}
+                position={coords}
+                icon={getDriverIcon(d, etaMin)}
+                zIndexOffset={500}
+              />
+            );
+          })}
           {userPos && (
-            <Marker position={userPos} icon={clientIcon}>
-              <Popup autoPan={false} closeButton={false} className="pickup-popup" permanent>
+            <Marker position={userPos} icon={clientIcon} zIndexOffset={1000}>
+              <Popup autoPan={false} closeButton={false} className="pickup-popup">
                 <div className="popup-content"><div className="dot"></div><span>{pickup}</span></div>
               </Popup>
             </Marker>
           )}
-          {destPos && <Marker position={destPos} icon={destinationIcon} />}
+          {destPos && (() => {
+            const etaLabel =
+              distanceKm > 0
+                ? `~${Math.max(1, Math.ceil((distanceKm / 25) * 60))} min`
+                : nearestWait
+                  ? `~${nearestWait.min} min`
+                  : "Arrivée";
+            return (
+              <Marker
+                key={`dest-${destPos[0]}-${destPos[1]}-${etaLabel}`}
+                position={destPos}
+                icon={createDestinationIcon(etaLabel)}
+                zIndexOffset={1200}
+              />
+            );
+          })()}
           {route.length > 0 && <Polyline positions={route} pathOptions={{ color: "#f35416", weight: 5 }} />}
-          <MapEffect a={userPos} b={destPos} recenterPos={recenterRequest} />
+          <MapEffect a={userPos} b={destPos} routePoints={route} recenterPos={recenterRequest} />
         </MapContainer>
-        
+
         <button onClick={() => userPos && setRecenterRequest([...userPos])} className="recenter-map-btn"><Target size={24} color="#f35416" /></button>
       </div>
 
-      {/* Modal Négociation Abidjan */}
-      {showNegotiationModal && !isRuralMode && (
-        <div className="negotiation-anchor-container">
-          <div className="negotiation-card-premium">
-            <div className="modal-header-premium">
-              <div className="header-info">
-                <div className="icon-badge"><Zap size={20} fill="#f35416" color="#f35416" /></div>
-                <h3>Votre prix ?</h3>
-              </div>
-              <button className="close-x" onClick={() => setShowNegotiationModal(false)}><X size={20} /></button>
-            </div>
+      <div className="bottom-panel-wrapper">
+        <div className="bottom-panel-card">
 
-            <div className="price-display-section">
-              <span className="currency-label">Montant F CFA (minimum éco)</span>
-              <input type="number" inputMode="numeric" value={urbanNegoPrice} onChange={e => setUrbanNegoPrice(e.target.value)} 
-                placeholder={getPrice(selectedVehicle)} className="big-price-input" autoFocus />
-            </div>
-
-            <div className="quick-add-grid">
-              <button onClick={() => setUrbanNegoPrice((prev => (parseInt(prev) || getPrice(selectedVehicle)) - 200).toString())} className="quick-btn">-200</button>
-              <button onClick={() => setUrbanNegoPrice((prev => (parseInt(prev) || getPrice(selectedVehicle)) + 200).toString())} className="quick-btn">+200</button>
-              <button onClick={() => setUrbanNegoPrice((prev => (parseInt(prev) || getPrice(selectedVehicle)) + 500).toString())} className="quick-btn">+500</button>
-              <button onClick={() => setUrbanNegoPrice((prev => (parseInt(prev) || getPrice(selectedVehicle)) + 1000).toString())} className="quick-btn">+1000</button>
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', margin: '15px 0' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
-                <input type="checkbox" checked={wantClim} onChange={e => setWantClim(e.target.checked)} /> Clim
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
-                <input type="checkbox" checked={wantArret} onChange={e => setWantArret(e.target.checked)} /> Arrêt
-              </label>
-            </div>
-
-            <button onClick={() => setShowNegotiationModal(false)} className="confirm-nego-btn" style={{ background: '#059669' }}>
-              VALIDER MON OFFRE
+          <div className="sector-pill-container">
+            <button className="sector-pill-btn" onClick={() => setShowSectorSelector(!showSectorSelector)}>
+              <MapPin size={14} color="#f35416" />
+              <span>Secteur: <strong>{currentSectorData.name}</strong></span>
             </button>
           </div>
-        </div>
-      )}
 
-      {isRuralMode && showNegotiationModal && (
-        <div className="negotiation-anchor-container">
-          <div className="negotiation-card-premium">
-            <div className="modal-header-premium">
-              <div className="header-info">
-                <div className="icon-badge"><Zap size={20} fill="#059669" color="#059669" /></div>
-                <h3>Proposer une offre</h3>
-              </div>
-              <button className="close-x" onClick={() => setShowNegotiationModal(false)}><X size={20} /></button>
-            </div>
-
-            <div className="price-display-section">
-              <span className="currency-label">Votre Proposition (minimum éco)</span>
-              <input type="number" inputMode="numeric" value={ruralProposedPrices[selectedVehicle] || getPrice(selectedVehicle)} onChange={e => handleKeyboardNegoRural(e.target.value)} 
-                className="big-price-input" autoFocus />
-            </div>
-
-            <div className="quick-add-grid">
-              <button onClick={() => handleQuickPriceRural(-200)} className="quick-btn">-200</button>
-              <button onClick={() => handleQuickPriceRural(200)} className="quick-btn">+200</button>
-              <button onClick={() => handleQuickPriceRural(500)} className="quick-btn">+500</button>
-              <button onClick={() => handleQuickPriceRural(1000)} className="quick-btn">+1000</button>
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', margin: '15px 0' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
-                <input type="checkbox" checked={wantClim} onChange={e => setWantClim(e.target.checked)} /> Clim
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
-                <input type="checkbox" checked={wantArret} onChange={e => setWantArret(e.target.checked)} /> Arrêt
-              </label>
-            </div>
-
-            <button onClick={() => setShowNegotiationModal(false)} className="confirm-nego-btn" style={{ background: '#059669' }}>
-              VALIDER MON OFFRE
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showSectorSelector && (
-        <div className="negotiation-anchor-container" style={{ zIndex: 9999 }}>
-          <div className="negotiation-card-premium" style={{ maxWidth: '340px' }}>
-            <div className="modal-header-premium">
-              <div className="header-info">
-                <div className="icon-badge"><Map size={20} color="#059669" /></div>
-                <h3 style={{ fontSize: '0.8rem', fontWeight: '800' }}>CHOISIR MA ZONE</h3>
-              </div>
-              <button className="close-x" onClick={() => setShowSectorSelector(false)}><X size={20} /></button>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', padding: '0.5rem 0.5rem' }}>
-              {Object.entries(SECTORS_CONFIG).map(([key, sector]) => (
-                <button 
-                  key={key} 
-                  onClick={() => selectRuralSector(key)}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0.55rem', background: '#ffffff', border: sector.isRural ? '1px solid #fff' : '1px solid #f35416', borderRadius: '12px', cursor: 'pointer' }}
-                >
-                  <img src={sector.img} alt={sector.name} style={{ width: '89px', height: '62px', borderRadius: '13%', objectFit: 'cover', marginBottom: '0.25rem' }} />
-                  <span style={{ color: '#000', fontSize: '0.60rem' }}>{sector.name}</span>
-                </button>
+          {showSectorSelector && (
+            <div className="sector-dropdown-menu">
+              {Object.keys(SECTORS_CONFIG).map(secKey => (
+                <div key={secKey} className={`sector-item ${currentSectorKey === secKey ? 'active' : ''}`} onClick={() => selectRuralSector(secKey)}>
+                  <img src={SECTORS_CONFIG[secKey].img} alt={SECTORS_CONFIG[secKey].name} />
+                  <span>{SECTORS_CONFIG[secKey].name}</span>
+                </div>
               ))}
             </div>
+          )}
+
+          <div className="destination-search-box" onClick={() => setShowSearchUI(true)}>
+            <Search size={18} color="#f35416" />
+            <span className={dest ? "dest-text-active" : "dest-placeholder"}>
+              {dest || getDynamicPlaceholder()}
+            </span>
           </div>
-        </div>
-      )}
 
-      <div className="booking-panel">
-        <div className="toggle-zone-container">
-          <button onClick={handleToggleZone} className={`zone-switch-btn ${isRuralMode ? 'alepe-active' : ''}`}>
-            <div className="zone-icon-circle">
-              <img src={currentSectorData.img} alt={currentSectorData.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '21%' }} />
+          {showSearchUI && (
+            <div className="search-overlay-modal">
+              <div className="search-header">
+                <input
+                  type="text"
+                  placeholder={getDynamicPlaceholder()}
+                  value={dest}
+                  onChange={(e) => {
+                    setDest(e.target.value);
+                    fetchSuggestions(e.target.value);
+                  }}
+                  autoFocus
+                />
+                <button onClick={() => setShowSearchUI(false)}><X size={20} /></button>
+              </div>
+              <div className="suggestions-list">
+                {suggestions.length === 0 ? (
+                  <p className="suggestions-empty">
+                    {dest && dest.length >= CONFIG.SUGGESTION_MIN_CHARS
+                      ? `Aucun résultat pour « ${dest} ». Essayez un quartier (ex: Plateau, Angré, Marcory)…`
+                      : "Tapez un lieu (ex: Collège, Plateau, Marcory, Cocody)…"}
+                  </p>
+                ) : (
+                  suggestions.map((item, index) => {
+                    const label = item._label || { main: item.display_name?.split(",")[0], secondary: "" };
+                    return (
+                      <div key={index} className="suggestion-item" onClick={() => handleSelectSuggestion(item)}>
+                        <div className="suggestion-pin"><MapPin size={16} color="#7a0edf" /></div>
+                        <div className="suggestion-text">
+                          <span className="suggestion-main">{label.main}</span>
+                          {label.secondary ? <span className="suggestion-sub">{label.secondary}</span> : null}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
-            <div className="zone-text-info">
-              <span className="zone-label">L'affichage de la zone active est automatique</span>
-              <span className="zone-name" style={{ fontSize: '0.70rem', fontWeight: '700' }}>
-                {isRuralMode ? `ZONE RURALE (${currentSectorData.name})` : `ZONE URBAINE (${currentSectorData.name})`}
-              </span>
-            </div>
-            <div className={`status-indicator ${isRuralMode ? 'bg-emerald-500' : 'bg-orange-500'}`}></div>
-          </button>
-        </div>
+          )}
 
-        <h2 className="panel-title">{dynamicUI.title}</h2>
-        
-        <div className="search-field">
-          <Navigation size={18} className="icon-search" />
-          <input
-            className="search-input"
-            placeholder={dynamicUI.placeholder}
-            value={dest}
-            onFocus={() => setShowSearchUI(true)}
-            onChange={(e) => {
-              setDest(e.target.value);
-              fetchSuggestions(e.target.value);
-            }}
-          />
-          {dest && <X size={18} className="close-search-ui-btn" onClick={() => { setDest(""); setDestPos(null); setRoute([]); }} />}
-        </div>
-
-        {/* Suggestion list */}
-        {showSearchUI && suggestions.length > 0 && (
-          <div className="suggestions-list">
-            {suggestions.map((sug, idx) => (
-              <button key={idx} className="suggestion-item" onClick={() => handleSelectSuggestion(sug)}>
-                <MapPin size={16} className="icon" />
-                <div className="text-container">
-                  <span className="name">{sug.name}</span>
-                  {sug.district && <span className="sub">{sug.district}</span>}
-                </div>
+          {!isRuralMode && (
+            <div className="category-filter-tabs">
+              <button className={`tab-btn ${activeFilter === 'moto' ? 'active' : ''}`} onClick={() => setActiveFilter('moto')}>
+                <img src={livraisonMotoIcon} alt="Moto" className="tab-icon" /> Moto
               </button>
-            ))}
-          </div>
-        )}
-
-        <div className="third-party-toggle">
-          <button className={`tp-btn ${isForThirdParty ? 'active' : ''}`} onClick={() => setIsForThirdParty(!isForThirdParty)}>
-            {isForThirdParty ? <Zap size={16} fill="currentColor" /> : <User size={16} />}
-            <span>Commander pour un {dynamicUI.thirdPartyLabel}</span>
-          </button>
-        </div>
-
-        {isForThirdParty && (
-          <div className="third-party-fields">
-            <div className="tp-input">
-              <User size={16} />
-              <input placeholder={`Nom du ${dynamicUI.thirdPartyLabel}`} value={thirdPartyName} onChange={e => setThirdPartyName(e.target.value)} />
+              <button className={`tab-btn ${activeFilter === 'vtc' ? 'active' : ''}`} onClick={() => setActiveFilter('vtc')}>
+                <img src={courseVtcIcon} alt="Cargo" className="tab-icon" /> Cargo
+              </button>
+              <button className={`tab-btn ${activeFilter === 'taxi' ? 'active' : ''}`} onClick={() => setActiveFilter('taxi')}>
+                <img src={taxiEcoImg} alt="Hustler" className="tab-icon" /> Hustling
+              </button>
             </div>
-            <div className="tp-input">
-              <Phone size={16} />
-              <input placeholder="Numéro de téléphone" type="tel" value={thirdPartyPhone} onChange={e => setThirdPartyPhone(e.target.value)} />
-            </div>
-          </div>
-        )}
+          )}
 
-        {!isRuralMode && (
-          <div className="transport-filters">
-            <button onClick={() => {setActiveFilter("moto"); setSelectedVehicle("Moto");}} className={`filter-btn ${activeFilter === 'moto' ? 'active' : ''}`}>
-              <img src={livraisonMotoIcon} alt="Moto" /><span>LIVRAISON</span>
-            </button>
-            <button onClick={() => {setActiveFilter("vtc"); setSelectedVehicle("VtcEco");}} className={`filter-btn ${activeFilter === 'vtc' ? 'active' : ''}`}>
-              <img src={courseVtcIcon} alt="VTC" /><span>VTC</span>
-            </button>
-            <button onClick={() => {setActiveFilter("taxi"); setSelectedVehicle("TaxiConfort");}} className={`filter-btn ${activeFilter === 'taxi' ? 'active' : ''}`}>
-              <img src={taxiCompteurIcon} alt="Taxi" /><span>TAXI</span>
-            </button>
-          </div>
-        )}
+          <div className="vehicles-horizontal-scroll">
+            {dynamicUI.map((item) => {
+              const isSelected = selectedVehicle === item.key;
+              const calculatedPrice = getPrice(item.key);
 
-        <div className={`vehicles-grid ${isRuralMode ? 'rural-unified' : ''}`}>
-          {Object.entries(configVehicules)
-            .filter(([id, v]) => isRuralMode ? v.isRural : v.type === activeFilter && !v.isRural)
-            .map(([id, v]) => {
-              const basePrice = getPrice(id);
-              const hasProposal = isRuralMode && ruralProposedPrices[id] && ruralProposedPrices[id] !== basePrice;
               return (
-                <button key={id} onClick={() => setSelectedVehicle(id)} className={`vehicle-card ${selectedVehicle === id ? 'selected' : ''}`}>
-                  <div className="vehicle-image"><img src={v.img} alt={v.mode} /></div>
-                  <span className="vehicle-name">{v.mode}</span>
-                  <div className="vehicle-price" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    {v.isArrangement ? "Négos" : <AnimatedPrice value={basePrice} />}
-                    {hasProposal && (
-                      <span style={{ fontSize: '0.55rem', background: '#dcfce7', color: '#166534', padding: '1px 4px', borderRadius: '4px', fontWeight: 'bold' }}>
-                        Offre: {ruralProposedPrices[id]}F
-                      </span>
-                    )}
+                <div
+                  key={item.key}
+                  className={`vehicle-card ${isSelected ? 'selected' : ''} ${item.isDisabled ? 'opacity-40 pointer-events-none' : ''}`}
+                  onClick={() => {
+                    if (!item.isDisabled) setSelectedVehicle(item.key);
+                  }}
+                  style={item.isDisabled ? { filter: "grayscale(100%)", cursor: "not-allowed" } : {}}
+                >
+                  <img src={item.img} alt={item.mode} className="vehicle-img" />
+                  <div className="vehicle-info">
+                    <span className="vehicle-title">{item.mode}</span>
+                    <span className="vehicle-price">
+                      {item.fixedRule ? (
+                        <span className="animated-price" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          <span>{calculatedPrice} F</span>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: "#10b981" }}>Max 2km</span>
+                        </span>
+                      ) : (
+                        <AnimatedPrice price={calculatedPrice} />
+                      )}
+                    </span>
                   </div>
-                </button>
+                </div>
               );
             })}
-        </div>
-
-        {isRuralMode && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0fdf4', padding: '0.6rem 1rem', borderRadius: '16px', margin: '0.5rem 0', border: '1px dashed #bbf7d0', gap: '1rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-              <span style={{ fontSize: '0.6rem', fontWeight: '800', color: '#166534' }}>PRIX INITIAL: {getPrice(selectedVehicle)} F</span>
-              <span style={{ fontSize: '0.7rem', fontWeight: '900', color: '#14532d', marginTop: '2px' }}>MA PROPOSITION :</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <button onClick={() => handleStepPriceRural("down")} style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#ffffff', border: '1px solid #bbf7d0' }}>
-                <Minus size={14} color="#059669" strokeWidth={3} />
-              </button>
-              <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#10b981', minWidth: '60px', textAlign: 'center' }}>
-                {ruralProposedPrices[selectedVehicle] || getPrice(selectedVehicle)} F
-              </span>
-              <button onClick={() => handleStepPriceRural("up")} style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#ffffff', border: '1px solid #bbf7d0' }}>
-                <Plus size={14} color="#059669" strokeWidth={3} />
-              </button>
-            </div>
-            <button onClick={() => setShowNegotiationModal(true)} style={{ background: '#059669', color: '#fff', fontSize: '0.65rem', fontWeight: '800', padding: '0.4rem 0.6rem', borderRadius: '8px' }}>CLAVIER</button>
           </div>
-        )}
-        
-      <button onClick={handleCommand} className={`cmd-button ${destPos ? 'active' : ''}`}>
-        {destPos ? (
-          <>
-            <Banknote size={20} />
-            <span>COMMANDER : </span>
-            <AnimatedPrice value={getPrice(selectedVehicle)} />
-          </>
-        ) : `INDIQUER LA ${dynamicUI.btnLabel}`}
-      </button>
+
+          <div className="third-party-toggle">
+            <label className="toggle-label">
+              <input
+                type="checkbox"
+                checked={isForThirdParty}
+                onChange={(e) => setIsForThirdParty(e.target.checked)}
+              />
+              <span>Commander pour quelqu'un d'autre ?</span>
+            </label>
+          </div>
+
+          {isForThirdParty && (
+            <div className="grid grid-cols-2 gap-2 mt-2 third-party-inputs">
+              <div className="input-with-icon">
+                <User size={14} />
+                <input
+                  type="text"
+                  placeholder="Nom du passager"
+                  value={
+                    isTiersFromVendeur
+                      ? maskData(thirdPartyNameInput, "text")
+                      : thirdPartyNameInput
+                  }
+                  onChange={(e) => {
+                    if (!isTiersFromVendeur) setThirdPartyNameInput(e.target.value);
+                  }}
+                  readOnly={isTiersFromVendeur}
+                  style={isTiersFromVendeur ? { backgroundColor: "#f1f5f9", cursor: "not-allowed" } : {}}
+                />
+              </div>
+              <div className="input-with-icon">
+                <Phone size={14} />
+                <input
+                  type="tel"
+                  placeholder="Téléphone"
+                  value={
+                    isTiersFromVendeur
+                      ? maskData(thirdPartyPhoneInput, "phone")
+                      : thirdPartyPhoneInput
+                  }
+                  onChange={(e) => {
+                    if (!isTiersFromVendeur) setThirdPartyPhoneInput(e.target.value);
+                  }}
+                  readOnly={isTiersFromVendeur}
+                  style={isTiersFromVendeur ? { backgroundColor: "#f1f5f9", cursor: "not-allowed" } : {}}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="mt-3 action-button-container">
+            {(isRuralMode || configVehicules[selectedVehicle]?.isArrangement) && (
+              <button
+                className="nego-trigger-btn"
+                onClick={() => {
+                  if (!destPos) {
+                    setInternalAlert({ type: "info", message: "Indiquez d'abord une destination" });
+                    return;
+                  }
+                  const v = configVehicules[selectedVehicle];
+                  let ecoPrice = getPrice(selectedVehicle);
+                  if (v?.isArrangement) {
+                    const ecoId = selectedVehicle.replace("Nego", "Eco").replace("Arrangement", "Eco");
+                    const ecoV = configVehicules[ecoId] || configVehicules.TaxiEco || configVehicules.VtcEco;
+                    if (ecoV) {
+                      let p = ecoV.base || 500;
+                      if (distanceKm > 0 && distanceKm < 4) p += distanceKm * 300;
+                      else p += distanceKm * (ecoV.km || 0);
+                      ecoPrice = Math.ceil(p / 100) * 100;
+                    } else {
+                      ecoPrice = v.minPrice || 1000;
+                    }
+                  }
+                  navigate("/negociation", {
+                    state: {
+                      orderId: state.orderId || null,
+                      vendeurId: state.vendeurId || null,
+                      ecoPrice,
+                      price: ecoPrice,
+                      vehicle: selectedVehicle,
+                      mode: v?.mode || "Négociable",
+                      destination: dest,
+                      dropoffAddress: dest,
+                      targetDestination: dest,
+                      pickupAddress: pickup,
+                      pickupLocation: userPos ? { lat: userPos[0], lng: userPos[1] } : null,
+                      dropoffLocation: destPos ? { lat: destPos[0], lng: destPos[1] } : null,
+                      distanceKm,
+                      isForThirdParty,
+                      clientName: thirdPartyNameInput,
+                      clientPhone: thirdPartyPhoneInput,
+                      thirdPartyName: thirdPartyNameInput,
+                      thirdPartyPhone: thirdPartyPhoneInput,
+                      isTiersOrder: isForThirdParty,
+                      fromVendeur: isTiersFromVendeur,
+                      isRuralMode,
+                      currentSectorKey,
+                    },
+                  });
+                }}
+              >
+                <Banknote size={18} /> Proposer un tarif
+              </button>
+            )}
+
+            <button className="submit-order-btn" onClick={handleCommand}>
+              {configVehicules[selectedVehicle]?.fixedRule
+                ? `Commander · ${getPrice(selectedVehicle)} F (Piéton/Bicyclette)`
+                : `Commander (${getPrice(selectedVehicle)} FCFA)`}
+            </button>
+          </div>
+
+        </div>
       </div>
     </div>
   );

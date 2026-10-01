@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { toast } from "react-toastify";
 
 // 1. CRÉATION DU CONTEXTE
 const CartContext = createContext();
@@ -48,52 +49,59 @@ export function CartProvider({ children }) {
     return () => unsubscribeSnapshot();
   }, [user]);
 
-  // Fonction pour ajouter un produit au panier
+  // Fonction pour ajouter un produit au panier (robuste et normalisée)
   const addToCart = async (product, quantity = 1) => {
-    if (!user) return false;
+    if (!user) {
+      toast.error("Veuillez vous connecter pour ajouter des articles au panier.");
+      return false;
+    }
     const cartRef = doc(db, "carts", user.uid);
     try {
-      const targetProductId = product.id || product.productId || Math.random().toString(36).substring(7);
+      const targetProductId = product.id || product.productId || product.uid || Math.random().toString(36).substring(7);
+      const targetVendorId = product.vendorId || product.vendeurId || 'default';
       
-      // Vérifier si le produit est déjà présent dans le panier local pour ajuster la quantité
-      const existingItemIndex = cart.findIndex(item => item.productId === targetProductId);
+      // Vérifier si le produit est déjà présent dans le panier
+      const existingItemIndex = cart.findIndex(item => 
+        (item.productId === targetProductId) || (item.id === targetProductId)
+      );
       
       let updatedItems = [...cart];
 
       if (existingItemIndex > -1) {
-        // ── ALTERNATIVE PROFESSIONNELLE DE QUANTITÉ ───────────────────────────
-        // Si le produit existe déjà, on incrémente sa quantité au lieu de laisser
-        // arrayUnion bloquer l'action en doublon.
-        const currentQty = Number(updatedItems[existingItemIndex].quantity || 1);
+        const currentQty = Number(updatedItems[existingItemIndex].quantity || updatedItems[existingItemIndex].quantite || 1);
+        const newQty = currentQty + Number(quantity);
         updatedItems[existingItemIndex] = {
           ...updatedItems[existingItemIndex],
-          quantity: currentQty + Number(quantity)
+          quantity: newQty,
+          quantite: newQty
         };
       } else {
-        // Si c'est un nouveau produit, on crée sa structure propre
         const cleanProduct = {
-          id: targetProductId, // Doublé par sécurité pour la lecture dans StorePage
+          id: targetProductId,
           productId: targetProductId,
-          nom: product.nom || "Article sans nom",
-          prix: Number(product.prix) || 0,
-          image: product.image || product.imageUrl || "",
-          vendorId: product.vendorId || null,
+          nom: product.nom || product.title || product.name || "Article sans nom",
+          prix: Number(product.prix || product.price || 0),
+          image: product.image || product.imageUrl || product.photo || "",
+          vendorId: targetVendorId,
+          vendeurId: targetVendorId,
           type: product.type || "",
-          categorie: product.categorie || "",
-          nomBoutique: product.nomBoutique || "",
-          quantity: Number(quantity)
+          categorie: product.categorie || product.category || "",
+          nomBoutique: product.nomBoutique || product.storeName || "Boutique Partenaire",
+          quantity: Number(quantity),
+          quantite: Number(quantity)
         };
         updatedItems.push(cleanProduct);
       }
 
-      // Envoi du tableau complet mis à jour à Firestore
       await setDoc(cartRef, {
         items: updatedItems
       }, { merge: true });
 
+      toast.success("Article ajouté au panier !");
       return true;
     } catch (error) {
       console.error("Erreur lors de l'ajout au panier:", error);
+      toast.error("Erreur lors de l'ajout au panier.");
       return false;
     }
   };
@@ -103,14 +111,15 @@ export function CartProvider({ children }) {
     if (!user) return false;
     const cartRef = doc(db, "carts", user.uid);
     try {
-      // Filtrage par ID pour éviter les problèmes de suppression d'objets Firestore arrayRemove
+      const targetId = productToRemove.productId || productToRemove.id;
       const updatedItems = cart.filter(item => 
-        (item.productId !== productToRemove.productId) && (item.productId !== productToRemove.id)
+        (item.productId !== targetId) && (item.id !== targetId)
       );
 
       await updateDoc(cartRef, {
         items: updatedItems
       });
+      toast.info("Article retiré du panier.");
       return true;
     } catch (error) {
       console.error("Erreur lors de la suppression du produit:", error);
@@ -118,7 +127,7 @@ export function CartProvider({ children }) {
     }
   };
 
-  // Fonction nécessaire pour le fonctionnement de CartPage.js après le paiement
+  // Fonction pour vider le panier après paiement
   const clearCart = async () => {
     if (!user) return false;
     const cartRef = doc(db, "carts", user.uid);
@@ -133,7 +142,6 @@ export function CartProvider({ children }) {
     }
   };
 
-  // Valeurs partagées à travers l'application
   const value = {
     cart,
     loading,
@@ -149,7 +157,6 @@ export function CartProvider({ children }) {
   );
 }
 
-// 3. HOOK PERSONNALISÉ (useCart)
 export function useCart() {
   const context = useContext(CartContext);
   if (context === undefined) {

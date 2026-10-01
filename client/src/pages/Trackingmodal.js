@@ -5,16 +5,16 @@ import { db } from "../firebase";
 
 import {
   AlertCircle,
+  AlertTriangle,
   Box,
   Car,
   Check,
   CheckCircle,
-  ChevronRight,
   Handshake,
   Loader2,
-  MapPin,
   Navigation,
   Phone,
+  ShieldCheck,
   X
 } from "lucide-react";
 
@@ -28,8 +28,8 @@ export default function TrackingModal({
   const navigate = useNavigate();
 
   const isExterne = mission?.zone !== "abidjan" || 
-                   mission?.isExterneZone === true || 
-                   mission?.assignedLivreurRole === "livreur-externe";
+                    mission?.isExterneZone === true || 
+                    mission?.assignedLivreurRole === "livreur-externe";
 
   // Redirection automatique
   useEffect(() => {
@@ -108,8 +108,8 @@ export default function TrackingModal({
   // Écran Succès
   if (status === "completed") {
     return (
-      <div className="absolute left-4 right-4 bottom-8 z-[1000] max-w-md mx-auto animate-in zoom-in duration-300">
-        <div className="bg-slate-900 rounded-[40px] p-8 text-white text-center shadow-2xl">
+      <div className="fixed left-0 right-0 bottom-0 z-[1000] w-full max-w-md mx-auto animate-in zoom-in duration-300 p-4">
+        <div className="bg-slate-900 rounded-[36px] p-8 text-white text-center shadow-2xl">
           <div className="flex items-center justify-center w-20 h-20 mx-auto mb-4 rounded-full bg-green-500/20">
             <CheckCircle size={40} className="text-green-500" />
           </div>
@@ -131,8 +131,8 @@ export default function TrackingModal({
   // Écran Annulé
   if (status === "cancelled") {
     return (
-      <div className="absolute left-4 right-4 bottom-8 z-[1000] max-w-md mx-auto animate-in zoom-in duration-300">
-        <div className="bg-white rounded-[40px] p-8 text-center shadow-2xl border-2 border-red-200">
+      <div className="fixed left-0 right-0 bottom-0 z-[1000] w-full max-w-md mx-auto animate-in zoom-in duration-300 p-4">
+        <div className="bg-white rounded-[36px] p-8 text-center shadow-2xl border-2 border-red-200">
           <AlertCircle size={40} className="mx-auto mb-4 text-red-500" />
           <h2 className="mb-2 text-2xl font-black uppercase text-slate-900">Course Annulée</h2>
           <p className="mb-8 text-xs font-bold text-slate-500">
@@ -151,18 +151,18 @@ export default function TrackingModal({
 
   return (
     <div
-      className="absolute left-4 right-4 z-[1000] max-w-md mx-auto transition-all duration-500 ease-out bottom-8 bg-white/95 backdrop-blur-2xl rounded-[40px] shadow-2xl border border-white/50 overflow-hidden"
-      style={{ maxHeight: isModalExpanded ? '75vh' : '40vh' }}
+      className="fixed bottom-0 left-0 right-0 z-[1000] w-full max-w-md mx-auto transition-all duration-500 ease-out bg-white/95 backdrop-blur-2xl rounded-t-[36px] shadow-[0_-10px_40px_rgba(0,0,0,0.15)] border-t border-white/50 overflow-hidden"
+      style={{ maxHeight: isModalExpanded ? '85vh' : '55vh' }}
     >
       {/* Poignée */}
       <div
-        className="flex items-center justify-center py-4 cursor-pointer active:bg-slate-100"
+        className="flex items-center justify-center py-3 cursor-pointer select-none active:bg-slate-100"
         onClick={() => setIsModalExpanded(!isModalExpanded)}
       >
         <div className={`w-12 h-1.5 rounded-full transition-colors ${isModalExpanded ? 'bg-indigo-500' : 'bg-slate-300'}`}></div>
       </div>
 
-      <div className="px-6 pb-6 overflow-y-auto" style={{ maxHeight: isModalExpanded ? 'calc(75vh - 70px)' : 'calc(40vh - 70px)' }}>
+      <div className="px-6 pb-8 overflow-y-auto" style={{ maxHeight: isModalExpanded ? 'calc(85vh - 40px)' : 'calc(55vh - 40px)' }}>
         {/* Négociation */}
         {isNegotiating && (
           <div className="relative p-4 mb-4 overflow-hidden border-2 border-purple-200 bg-purple-50 rounded-2xl">
@@ -201,26 +201,65 @@ export default function TrackingModal({
           </div>
         )}
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        {/* Consigne de Sécurité */}
+        <div className="flex items-center gap-3 p-3 mb-4 border shadow-sm bg-amber-50 border-amber-200/80 rounded-2xl">
+          <ShieldCheck size={26} className="flex-shrink-0 text-amber-600" />
+          <p className="text-[11px] font-extrabold text-amber-900 leading-tight">
+            Ne remettez votre colis <span className="font-black underline decoration-amber-500">seulement si le livreur correspond</span> à la photo affichée ci-dessous.
+          </p>
+        </div>
+
+        {/* Header avec Photo Agrandie + Infos Chauffeur */}
+        <div className="flex items-start justify-between p-4 mb-5 border bg-slate-50 rounded-3xl border-slate-100">
           <div className="flex items-center gap-4">
-            <div className={`p-4 rounded-3xl text-white shadow-lg transition-all ${isNegotiating ? 'bg-purple-500' : isInTransit ? 'bg-green-500' : 'bg-indigo-600'}`}>
-              {stepInfo.icon}
+            {/* Photo de profil AGRANDIE */}
+            <div className="relative">
+              {mission.assignedLivreurPhoto ? (
+                <img
+                  src={mission.assignedLivreurPhoto}
+                  alt={mission.assignedLivreurName}
+                  className="object-cover w-20 h-20 border-2 border-indigo-600 shadow-md rounded-2xl"
+                />
+              ) : (
+                <div className="flex items-center justify-center w-20 h-20 text-white bg-indigo-600 shadow-md rounded-2xl">
+                  <span className="text-2xl font-black">
+                    {mission.assignedLivreurName?.charAt(0) || "C"}
+                  </span>
+                </div>
+              )}
+              <span className={`absolute -bottom-1 -right-1 flex w-4 h-4 rounded-full border-2 border-white ${isNegotiating ? 'bg-purple-500' : 'bg-green-500'}`}></span>
             </div>
+
             <div>
-              <h3 className="mb-1 text-lg italic font-black leading-none uppercase text-slate-900">
+              <h3 className="mb-1 text-base italic font-black leading-tight uppercase text-slate-900">
                 {mission.assignedLivreurName || "Recherche..."}
               </h3>
-              <div className="flex items-center gap-1">
-                <span className={`flex w-2 h-2 rounded-full animate-pulse ${isNegotiating ? 'bg-purple-500' : 'bg-green-500'}`}></span>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
+              
+              {/* Infos Véhicule : Marque & Immatriculation */}
+              <div className="space-y-0.5">
+                {(mission.vehicleBrand || mission.vehicleModel) && (
+                  <p className="text-xs font-bold uppercase text-slate-700">
+                    🏍️ {mission.vehicleBrand} {mission.vehicleModel}
+                  </p>
+                )}
+                {mission.vehiclePlate && (
+                  <span className="inline-block px-2 py-0.5 text-[10px] font-mono font-black tracking-wider text-slate-800 bg-amber-200 border border-amber-300 rounded-md uppercase">
+                    {mission.vehiclePlate}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 mt-1">
+                <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-tight flex items-center gap-1">
+                  {stepInfo.icon}
                   {stepInfo.label}
                 </p>
               </div>
             </div>
           </div>
+
           <div className="text-right">
-            <p className="mb-1 text-xs font-bold leading-none uppercase text-slate-400">Prix</p>
+            <p className="mb-1 text-[10px] font-bold leading-none uppercase text-slate-400">Prix</p>
             <p className={`text-xl italic font-black ${isNegotiating ? 'text-purple-600' : 'text-slate-900'}`}>
               {(mission.price || 0).toLocaleString()}F
             </p>
@@ -229,24 +268,24 @@ export default function TrackingModal({
 
         {/* Distance / Temps */}
         {!isNegotiating && (
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            <div className="p-4 border border-indigo-100 bg-indigo-50/50 rounded-2xl">
-              <div className="flex items-center gap-2 mb-2">
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className="p-3.5 border border-indigo-100 bg-indigo-50/50 rounded-2xl">
+              <div className="flex items-center gap-2 mb-1">
                 <Navigation size={14} className="text-indigo-600" />
                 <span className="text-[9px] font-black text-indigo-600 uppercase">Distance</span>
               </div>
-              <p className="text-2xl italic font-black text-slate-900">
-                {distanceKm}<span className="ml-1 text-sm text-slate-500">km</span>
+              <p className="text-xl italic font-black text-slate-900">
+                {distanceKm}<span className="ml-1 text-xs text-slate-500">km</span>
               </p>
             </div>
 
-            <div className="p-4 border border-amber-100 bg-amber-50/50 rounded-2xl">
-              <div className="flex items-center gap-2 mb-2">
+            <div className="p-3.5 border border-amber-100 bg-amber-50/50 rounded-2xl">
+              <div className="flex items-center gap-2 mb-1">
                 <Loader2 size={14} className="text-amber-600" />
                 <span className="text-[9px] font-black text-amber-600 uppercase">Arrivée</span>
               </div>
-              <p className="text-2xl italic font-black text-slate-900">
-                {durationMin}<span className="ml-1 text-sm text-slate-500">min</span>
+              <p className="text-xl italic font-black text-slate-900">
+                {durationMin}<span className="ml-1 text-xs text-slate-500">min</span>
               </p>
             </div>
           </div>

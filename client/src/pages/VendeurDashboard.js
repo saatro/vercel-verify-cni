@@ -1,52 +1,83 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
-import { functions } from '../firebase';
-import { httpsCallable } from 'firebase/functions';
 import {
   doc, getDoc, collection, query, where,
-  onSnapshot, addDoc, updateDoc, deleteDoc,
-  serverTimestamp, writeBatch, getDocs
+  onSnapshot, serverTimestamp, writeBatch, increment, addDoc, updateDoc
 } from 'firebase/firestore';
 import { uploadToCloudinary } from '../utils/cloudinary';
 import { signOut } from 'firebase/auth';
 import {
   Package, Plus, ShoppingBag, LogOut, Loader2, X,
-  ChevronRight, User, Search, Trash2, PlusCircle
+  ChevronRight, User, Search, Coins, MessageSquare, ExternalLink,
+  ShieldCheck, ShieldAlert
 } from 'lucide-react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-import CategorieDynamique from '../components/CategorieDynamique';
+import CategorieDynamique, {
+  getSubCategories,
+  normalizeCategoryId,
+} from '../components/CategorieDynamique';
 import VendeurCommandeDetail from '../components/VendeurCommandeDetail';
 import './VendeurDashboard.css';
 
 import VendeurHeader from '../components/VendeurHeader';
 
-// ── Constantes ─────────────────────────────────────────────────────────────────
-const NOTIFICATION_SOUND = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
-const DEFAULT_LOGO       = 'https://ui-avatars.com/api/?name=Boutique&background=6d28d9&color=fff';
-const DEFAULT_PRODUCT    = 'https://placehold.jp/24/6d28d9/ffffff/200x200.png?text=Aperçu';
-
-const CATEGORIES_MAP = {
-  boutique:         ['Mode','Électronique','Beauté','Parfumerie','Maison','Jeux','Téléphones','Accessoires','Autre'],
-  supermarche:     ['Épicerie','Fruits & Légumes','Viandes & Poissons','Produits laitiers','Boissons','Surgelés','Hygiène & Beauté','Bébé','Entretien','Autre'],
-  resto_fastfood:  ['Menu Complet','Entrées','Plats','Desserts','Boissons','Fast-Food'],
-  en_ligne:         ['Logiciels','Formations','Abonnements','Services','Design','Coaching','Tickets','Autre'],
-  deal_particulier:['Mode','Téléphones','Ordinateurs','Électronique','Meubles','Vélos','Jeux','Autre'],
-  immobilier:      ['Studio','Chambre Salon','2 Pièces','3 Pièces','4 Pièces','Villa','Duplex','Terrain','Bureau'],
-  vehicule:        ['Berline','SUV / 4x4','Moto','Camion','Pick-up','Utilitaire'],
-  autre:           ['Artisanat','Cosmétiques','Agriculture','Services','Autre'],
+// ── Fonction utilitaire pour hacher / masquer un numéro de téléphone ──────────
+const hashPhoneNumber = (phone) => {
+  if (!phone) return 'Non renseigné';
+  const str = String(phone).trim();
+  if (str.length <= 4) return '****';
+  return str.substring(0, 2) + '****' + str.substring(str.length - 2);
 };
 
-// eslint-disable-next-line no-unused-vars
-const STATUS_META = {
-  en_preparation:       { label: "En préparation", color: "#b45309", bg: "#fef3c7", border: "#fde68a" },
-  en_attente_paiement:  { label: "Attente Reçu Wave", color: "#d97706", bg: "#fffbeb", border: "#fcd34d" },
-  paye_ia_valide:       { label: "Payé & Validé", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
-  achats_termines:      { label: "Prêt pour Livreur", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
-  en_route:             { label: "En cours de route", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe" },
-  en_attente_coursier:  { label: "Recherche Livreur", color: "#475569", bg: "#f8fafc", border: "#e2e8f0" }
+// ── Constantes ─────────────────────────────────────────────────────────────────
+const DEFAULT_LOGO    = 'https://ui-avatars.com/api/?name=Boutique&background=6d28d9&color=fff';
+const DEFAULT_PRODUCT = 'https://placehold.jp/24/6d28d9/ffffff/200x200.png?text=Aperçu';
+const ADMIN_PHONE     = '0778073456';
+const WAVE_LINK       = 'https://pay.wave.com/m/M_ci_fAQd8MgriWne/c/ci/';
+
+// ── Styles CSS-in-JS pour la navigation mobile ───
+const styles = {
+  bottomNav: {
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '64px',
+    backgroundColor: '#ffffff',
+    borderTop: '1px solid #f1f5f9',
+    display: 'flex',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingBottom: 'env(safe-area-inset-bottom)',
+    boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.05)',
+    zIndex: 999,
+  },
+  navButton: {
+    background: 'transparent',
+    border: 'none',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    height: '100%',
+    color: '#94a3b8',
+    cursor: 'pointer',
+    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+    gap: '4px',
+  },
+  activeNavButton: {
+    color: '#6d28d9',
+    transform: 'translateY(-1px)',
+  },
+  navLabel: {
+    fontSize: '10px',
+    fontWeight: '700',
+    letterSpacing: '0.02em',
+  }
 };
 
 // ── Composant Champ Formulaire ────────────────────────────────────────────────
@@ -72,10 +103,138 @@ const FormField = ({ label, children }) => (
   </div>
 );
 
+// ── Modal de Vérification CNI / Pièce d'identité via IA ─────────────────────────
+function CniVerificationModal({ user, onSuccess, onClose }) {
+  const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const expectedName = (
+    user?.nomBoutique || 
+    user?.enseigne || 
+    `${user?.prenom || ''} ${user?.nom || user?.nomComplet || ''}`
+  ).trim();
+
+  const convertToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!file) {
+      setError("Veuillez sélectionner une image nette de votre pièce d'identité.");
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const imageBase64 = await convertToBase64(file);
+
+      const response = await fetch('/api/verify-cni', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64,
+          expectedName,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        const message = data.reasons && data.reasons.length > 0 
+          ? data.reasons.join(' ') 
+          : (data.error || "Échec de la vérification.");
+        setError(message);
+      } else {
+        toast.success("Pièce d'identité certifiée avec succès !");
+        if (onSuccess) onSuccess(data);
+      }
+    } catch (err) {
+      setError("Erreur lors de la communication avec le serveur de vérification.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="m-modal-fs fade-in" style={{ zIndex: 1200, background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: '#ffffff', borderRadius: 20, maxWidth: 440, width: '100%', padding: 24, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0f172a' }}>Verification CNI / Identité</h3>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}>
+            <X size={20}/>
+          </button>
+        </div>
+
+        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16, lineHeight: 1.4 }}>
+          Nom attendu sur le document : <strong style={{ color: '#0f172a' }}>{expectedName || 'Non spécifié'}</strong>
+        </p>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6 }}>
+              Photo recto de la pièce d'identité (CNI / Passeport / Attestation)
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                if (e.target.files?.[0]) {
+                  setFile(e.target.files[0]);
+                  setError('');
+                }
+              }}
+              style={{
+                width: '100%',
+                fontSize: 12,
+                padding: '10px',
+                border: '1px solid #cbd5e1',
+                borderRadius: 10,
+                background: '#f8fafc'
+              }}
+            />
+          </div>
+
+          {error && (
+            <div style={{ padding: 10, background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 10, fontSize: 12 }}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: '#6d28d9', color: '#fff', fontWeight: 700, fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+            >
+              {loading ? <><Loader2 className="animate-spin" size={16}/> Vérification IA...</> : 'Soumettre et vérifier'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Dashboard Principal ────────────────────────────────────────────────────────
 export default function VendeurDashboard() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [activeTab, setActiveTab] = useState('stock');
   const [userProfile, setUserProfile] = useState(null);
   const [products, setProducts] = useState([]);
@@ -84,117 +243,11 @@ export default function VendeurDashboard() {
   const [stats, setStats] = useState({ totalProduits: 0, totalVentes: 0, chiffreAffaires: 0 });
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [showCniModal, setShowCniModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState(null);
-
-  const prevOrderIds = React.useRef(new Set());
-  const [verificationCodes, setVerificationCodes] = useState({});
-  const [regeneratingId, setRegeneratingId] = useState(null);
-
-  useEffect(() => {
-    if (!userProfile) return;
-
-    const queryParams = new URLSearchParams(location.search);
-    const source = queryParams.get('source');
-    
-    if (source === 'boutique' || source === 'coursier_rayons') {
-      const targetDestination = queryParams.get('adresse') || queryParams.get('targetDestination') || '';
-      const prefillName = queryParams.get('nom') || queryParams.get('prefillName') || '';
-      const prefillPhone = queryParams.get('telephone') || queryParams.get('prefillPhone') || '';
-      const montantArticles = Number(queryParams.get('montant') || queryParams.get('montantArticles') || 0);
-
-      toast.info(`Pre-remplissage détecté (${source === 'boutique' ? 'Boutique' : 'Coursier rayons'})`);
-
-      navigate("/client-home", {
-        state: {
-          isTiersOrder: true,
-          vendeurId: userProfile.id,
-          vendeurNom: userProfile.nomBoutique || userProfile.enseigne || userProfile.nomComplet || "Vendeur Mambo",
-          departAdresse: userProfile.adresse || "",
-          prefillName: prefillName,
-          prefillPhone: prefillPhone,
-          targetDestination: targetDestination,
-          targetAddress: targetDestination,
-          montantArticles: montantArticles,
-          montantLivraison: 0,
-          items: [],
-          isAutoAssign: true,
-          fromVendeur: true,
-          prefillSource: source
-        }
-      });
-    }
-  }, [location.search, userProfile, navigate]);
-  
-  useEffect(() => {
-    if (!userProfile?.id) return;
-
-    const qMessages = query(
-      collection(db, "inAppMessages"),
-      where("receiverId", "==", userProfile.id),
-      where("status", "==", "unread")
-    );
-
-    const unsubMessages = onSnapshot(qMessages, (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "added") {
-          const msgData = change.doc.data();
-          
-          toast.info(`💬 ${msgData.title || "Nouveau message"} : ${msgData.body}`, {
-            position: "top-center",
-            autoClose: 5000,
-          });
-
-          updateDoc(doc(db, "inAppMessages", change.doc.id), {
-            status: "read",
-            readAt: serverTimestamp()
-          }).catch(err => console.error("Erreur mise à jour message lu :", err));
-        }
-      });
-    }, (err) => {
-      console.warn("Erreur d'écoute des messages In-App :", err.message);
-    });
-
-    return () => unsubMessages();
-  }, [userProfile?.id]);
-
-  useEffect(() => {
-    if (!userProfile?.id) return;
-
-    const requestPushPermission = async () => {
-      try {
-        if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-          return;
-        }
-
-        const { getMessaging, getToken } = await import('firebase/messaging');
-        const messaging = getMessaging();
-        
-        const permission = await Notification.requestPermission();
-        
-        if (permission === 'granted') {
-          const currentToken = await getToken(messaging, { 
-            vapidKey: 'BDE5b26fkUCHbCy7IzjX30eDjJpfQev7GWOrKc6yJxUV48L0XInKEd2urQwzuqUgjQ5UAfP9EcvZ3gtXYI52oII' 
-          }).catch(err => {
-            console.warn('Erreur récupération jeton FCM :', err.message);
-            return null;
-          });
-          
-          if (currentToken) {
-            await updateDoc(doc(db, "users", userProfile.id), {
-              fcmToken: currentToken,
-              updatedAt: serverTimestamp()
-            });
-          }
-        }
-      } catch (err) {
-        console.warn('Configuration notifications Push désactivée ou échouée :', err.message);
-      }
-    };
-
-    requestPushPermission();
-  }, [userProfile?.id]);
 
   useEffect(() => {
     let unsubP = () => {};
@@ -215,9 +268,13 @@ export default function VendeurDashboard() {
         setUserProfile({
           id: vId,
           ...uData,
-          nomBoutique: uData?.nomBoutique || uData?.enseigne || uData?.nomComplet,
-          logo:        uData?.photoURL    || uData?.logo    || DEFAULT_LOGO,
-          telephone:   uData?.telephone   || '',
+          nomBoutique:  uData?.nomBoutique || uData?.enseigne || uData?.nomComplet,
+          logo:         uData?.photoURL    || uData?.logo    || DEFAULT_LOGO,
+          telephone:    uData?.telephone   || '',
+          jetons:       uData?.jetons      || 0, 
+          cniVerified:  Boolean(uData?.cniVerified),
+          cniFullName:  uData?.cniFullName || '',
+          cniNumber:    uData?.cniNumber   || '',
         });
 
         unsubP = onSnapshot(
@@ -279,157 +336,40 @@ export default function VendeurDashboard() {
     };
   }, [navigate]);
 
+  const handleCniSuccess = async (cniData) => {
+    if (!userProfile?.id) return;
+    try {
+      const userRef = doc(db, 'users', userProfile.id);
+      const updatePayload = {
+        cniVerified: true,
+        cniFullName: cniData.fullName || '',
+        cniNumber: cniData.cniNumber || '',
+        cniVerifiedAt: serverTimestamp(),
+      };
+
+      await updateDoc(userRef, updatePayload);
+      setUserProfile(prev => ({ ...prev, ...updatePayload, cniVerified: true }));
+      setShowCniModal(false);
+    } catch (err) {
+      console.error("Erreur mise à jour Firestore CNI:", err);
+      toast.error("Erreur lors de la mise à jour de la certification sur votre profil.");
+    }
+  };
+
   const pendingCount = useMemo(() =>
-    orders.filter(o => ['paye','paye_ia_valide','en_attente_livreur','preparation','attente'].includes((o.status||'').toLowerCase())).length,
+    orders.filter(o => 
+      [
+        'paye',
+        'paye_ia_valide',
+        'attente_livreur',
+        'en_attente_livreur',
+        'en_attente_coursier',
+        'en_attente_commission',
+        'preparation',
+        'attente'
+      ].includes((o.status || '').toLowerCase())
+    ).length,
   [orders]);
-
-  const fetchVerificationCode = React.useCallback(async (orderId) => {
-    try {
-      const q = query(collection(db, "courses"), where("orderId", "==", orderId));
-      const querySnap = await getDocs(q);
-      
-      if (!querySnap.empty) {
-        const courseData = querySnap.docs[0].data();
-        const detectedCode = courseData.passCode || courseData.verificationCode || courseData.pickupCode || "";
-        const deliveryCode = courseData.deliveryCode || "";
-        
-        if (detectedCode) {
-          setVerificationCodes(prev => ({
-            ...prev,
-            [orderId]: { pickupCode: detectedCode, deliveryCode: deliveryCode }
-          }));
-          return;
-        }
-      }
-      
-      const directSnap = await getDoc(doc(db, "courses", orderId));
-      if (directSnap.exists()) {
-        const data = directSnap.data();
-        const code = data.passCode || data.verificationCode || data.pickupCode || "";
-        const deliveryCode = data.deliveryCode || "";
-        if (code) {
-          setVerificationCodes(prev => ({
-            ...prev,
-            [orderId]: { pickupCode: code, deliveryCode: deliveryCode }
-          }));
-          return;
-        }
-      }
-
-      setVerificationCodes(prev => ({ ...prev, [orderId]: null }));
-    } catch (e) {
-      console.warn("Erreur lecture code de passation:", e.message);
-      setVerificationCodes(prev => ({ ...prev, [orderId]: null }));
-    }
-  }, []);
-
-  useEffect(() => {
-    const toCheck = orders.filter(o => o.courseRequested);
-    toCheck.forEach(o => {
-      if (!(o.id in verificationCodes)) fetchVerificationCode(o.id);
-    });
-  }, [orders, verificationCodes, fetchVerificationCode]);
-
-  const handleRegenerateCode = async (orderId) => {
-    setRegeneratingId(orderId);
-    try {
-      const linkQ = query(collection(db, "courses"), where("orderId", "==", orderId));
-      const linkSnap = await getDocs(linkQ);
-
-      if (linkSnap.empty) {
-        toast.error("Aucune course trouvée pour cette commande. Relancez d'abord la commande de course.");
-        setRegeneratingId(null);
-        return;
-      }
-
-      const realCourseId = linkSnap.docs[0].id;
-      const initCodes = httpsCallable(functions, "initializeVerificationCodes");
-      const result = await initCodes({ courseId: realCourseId });
-
-      setVerificationCodes(prev => ({
-        ...prev,
-        [orderId]: { pickupCode: result.data.pickupCode, deliveryCode: result.data.deliveryCode }
-      }));
-      toast.success("Code de passation généré !");
-    } catch (e) {
-      toast.error(e.message || "Impossible de générer le code.");
-    } finally {
-      setRegeneratingId(null);
-    }
-  };
-
-  useEffect(() => {
-    const newOrders = orders.filter(o =>
-      ['paye_ia_valide', 'en_attente_livreur'].includes((o.status || '').toLowerCase()) &&
-      !prevOrderIds.current.has(o.id)
-    );
-    if (newOrders.length > 0) {
-      NOTIFICATION_SOUND.play().catch(() => {});
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-      newOrders.forEach(o => {
-        toast.success(`💰 Commande #${o.orderId || o.id.slice(-5)} — ${Number(o.amount||0).toLocaleString()} F`);
-      });
-    }
-    orders.forEach(o => prevOrderIds.current.add(o.id));
-  }, [orders]);
-
-  const handleOrderLaunchToTiers = async (order) => {
-    if (!userProfile) return toast.error("Données du vendeur non chargées.");
-    try {
-      await updateDoc(doc(db, 'orders', order.id), { courseRequested: true });
-    } catch (e) {
-      console.warn("Impossible de marquer courseRequested:", e.message);
-    }
-
-    let clientName = order.nom || order.clientName || order.nomClient || '';
-    let clientPhone = order.telephone || order.clientPhone || order.telephoneClient || '';
-    let deliveryAddress = order.adresse || order.deliveryAddress || order.adresseLivraison || '';
-
-    if (!clientName || !clientPhone || !deliveryAddress) {
-      const clientUid = order.clientId || order.userId;
-      if (clientUid) {
-        try {
-          const clientSnap = await getDoc(doc(db, 'users', clientUid));
-          if (clientSnap.exists()) {
-            const clientData = clientSnap.data();
-            clientName = clientName || clientData.nom || clientData.nomComplet || '';
-            clientPhone = clientPhone || clientData.telephone || '';
-            deliveryAddress = deliveryAddress || clientData.adresse || '';
-          }
-        } catch (e) {
-          console.warn("Impossible de charger le profil client :", e);
-        }
-      }
-    }
-
-    if (!deliveryAddress) {
-      toast.warn("Adresse de livraison introuvable pour cette commande — merci de la saisir manuellement dans le prochain écran.");
-    }
-
-    navigate("/client-home", {
-      state: {
-        isTiersOrder: true,
-        orderId: order.id,
-        customOrderId: order.orderId || "",
-
-        vendeurId: userProfile.id,
-        vendeurNom: userProfile.nomBoutique || userProfile.enseigne || userProfile.nomComplet || "Vendeur Mambo",
-        departAdresse: userProfile.adresse || "",
-
-        prefillName: clientName,
-        prefillPhone: clientPhone,
-        targetDestination: deliveryAddress,
-        targetAddress: deliveryAddress,
-
-        montantArticles: Number(order.amount || order.total || 0),
-        montantLivraison: Number(order.deliveryFee || order.fraisLivraison || 0),
-
-        items: order.items || [],
-        isAutoAssign: true,
-        fromVendeur: true,
-      }
-    });
-  };
 
   if (loading) return <div className="m-loader"><Loader2 className="animate-spin" size={42} color="#6d28d9"/></div>;
 
@@ -451,13 +391,33 @@ export default function VendeurDashboard() {
           <>
             {activeTab === 'stock' && (
               <div className="fade-in">
-                <div className="m-search-container" style={{ padding:'16px' }}>
-                  <div className="m-search-bar">
+                <div className="m-search-container" style={{ padding:'16px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <div className="m-search-bar" style={{ flex: 1 }}>
                     <Search size={18}/>
                     <input placeholder="Produit…" onChange={e => setSearchTerm(e.target.value)}/>
                   </div>
-                  <button className="m-add-fab" onClick={() => { setEditingProduct(null); setShowModal(true); }}><Plus size={24}/></button>
+                  <button 
+                    className="m-add-fab" 
+                    onClick={() => { 
+                      if (!userProfile?.cniVerified) {
+                        toast.warn("Veuillez d'abord certifier votre pièce d'identité dans votre profil pour ajouter des produits.");
+                        setActiveTab('profil');
+                        setShowCniModal(true);
+                        return;
+                      }
+                      if (products.length >= 5 && (userProfile?.jetons || 0) < 100) {
+                        toast.error("Limite de 5 produits gratuits atteinte. Rechargez votre compte jetons (100 F requis pour ce produit).");
+                        setShowRechargeModal(true);
+                        return;
+                      }
+                      setEditingProduct(null); 
+                      setShowModal(true); 
+                    }}
+                  >
+                    <Plus size={24}/>
+                  </button>
                 </div>
+
                 <div className="m-product-grid">
                   {products.filter(p => p.nom?.toLowerCase().includes(searchTerm.toLowerCase())).map(p => (
                     <div key={p.id} className="m-product-card" onClick={() => { setEditingProduct(p); setShowModal(true); }}>
@@ -477,82 +437,447 @@ export default function VendeurDashboard() {
                 orders={orders} 
                 completedOrders={completedOrders} 
                 onOrderClick={setSelectedOrderId}
-                onLaunchTiers={handleOrderLaunchToTiers}
-                verificationCodes={verificationCodes}
-                regeneratingId={regeneratingId}
-                onRegenerateCode={handleRegenerateCode}
               />
             )}
 
-            {activeTab === 'profil' && <ProfileView user={userProfile} stats={stats}/>}
+            {activeTab === 'messagerie' && (
+              <VendorMessagingView user={userProfile} />
+            )}
+
+            {activeTab === 'profil' && (
+              <ProfileView 
+                user={userProfile} 
+                stats={stats} 
+                onOpenRecharge={() => setShowRechargeModal(true)} 
+                onOpenCniModal={() => setShowCniModal(true)}
+              />
+            )}
           </>
         )}
       </main>
 
-      <nav className="m-bottom-nav">
-        <button className={activeTab === 'stock' ? 'active' : ''} onClick={() => setActiveTab('stock')}><Package size={22}/><span>Stock</span></button>
-        <button className={activeTab === 'ventes' ? 'active' : ''} onClick={() => setActiveTab('ventes')}><ShoppingBag size={22}/><span>Ventes</span></button>
-        <button className={activeTab === 'profil' ? 'active' : ''} onClick={() => setActiveTab('profil')}><User size={22}/><span>Profil</span></button>
+      <nav style={styles.bottomNav}>
+        <button 
+          style={{ ...styles.navButton, ...(activeTab === 'stock' ? styles.activeNavButton : {}) }} 
+          onClick={() => setActiveTab('stock')}
+        >
+          <Package size={22} strokeWidth={activeTab === 'stock' ? 2.5 : 1.8} />
+          <span style={styles.navLabel}>Stock</span>
+        </button>
+
+        <button 
+          style={{ ...styles.navButton, ...(activeTab === 'ventes' ? styles.activeNavButton : {}) }} 
+          onClick={() => setActiveTab('ventes')}
+        >
+          <ShoppingBag size={22} strokeWidth={activeTab === 'ventes' ? 2.5 : 1.8} />
+          <span style={styles.navLabel}>Ventes</span>
+        </button>
+
+        <button 
+          style={{ ...styles.navButton, ...(activeTab === 'messagerie' ? styles.activeNavButton : {}) }} 
+          onClick={() => setActiveTab('messagerie')}
+        >
+          <MessageSquare size={22} strokeWidth={activeTab === 'messagerie' ? 2.5 : 1.8} />
+          <span style={styles.navLabel}>Messagerie</span>
+        </button>
+
+        <button 
+          style={{ ...styles.navButton, ...(activeTab === 'profil' ? styles.activeNavButton : {}) }} 
+          onClick={() => setActiveTab('profil')}
+        >
+          <User size={22} strokeWidth={activeTab === 'profil' ? 2.5 : 1.8} />
+          <span style={styles.navLabel}>Profil</span>
+        </button>
       </nav>
 
-      {showModal && <ProductModal user={userProfile} product={editingProduct} onClose={() => setShowModal(false)}/>}
+      {showModal && (
+        <ProductModal 
+          user={userProfile} 
+          product={editingProduct} 
+          productCount={products.length}
+          onClose={() => setShowModal(false)}
+          onRequireRecharge={() => setShowRechargeModal(true)}
+        />
+      )}
+
+      {showRechargeModal && (
+        <RechargeModal 
+          user={userProfile} 
+          onClose={() => setShowRechargeModal(false)} 
+        />
+      )}
+
+      {showCniModal && (
+        <CniVerificationModal
+          user={userProfile}
+          onSuccess={handleCniSuccess}
+          onClose={() => setShowCniModal(false)}
+        />
+      )}
     </div>
   );
 }
 
-// ── Modal Produit ──────────────────────────────────────────────────────────────
-function ProductModal({ user, product, onClose }) {
+// ── Composant de Messagerie Vendeur (Synchro inAppMessages & Wave) ──
+function VendorMessagingView({ user }) {
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [loadingMsg, setLoadingMsg] = useState(true);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const q = query(collection(db, 'inAppMessages'), where('receiverId', '==', user.id));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setMessages(msgs.sort((a, b) => (b.timestamp?.seconds || b.createdAt?.seconds || 0) - (a.timestamp?.seconds || a.createdAt?.seconds || 0)));
+      setLoadingMsg(false);
+    }, (error) => {
+      console.error("Erreur écoute messages vendeur :", error);
+      setLoadingMsg(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !user?.id) return;
+
+    try {
+      await addDoc(collection(db, 'inAppMessages'), {
+        senderId: user.id,
+        receiverId: 'support', 
+        vendorId: user.id,
+        text: newMessage,
+        timestamp: serverTimestamp(),
+        read: false,
+      });
+      setNewMessage('');
+    } catch (error) {
+      console.error("Erreur lors de l'envoi du message :", error);
+      toast.error("Erreur lors de l'envoi du message.");
+    }
+  };
+
+  const handleCoursierPaymentQuery = () => {
+    const hashedPhone = hashPhoneNumber(user?.telephone);
+    const text = `Bonjour Assistance Mambo,\nJe souhaite confirmer le paiement de ma commission de coursier.\n(Vendeur: ${user?.nomBoutique || 'Boutique'} | Tél: ${hashedPhone})\n\nVoici mon reçu complet Wave pour vérification.`;
+    window.open(`https://wa.me/225${ADMIN_PHONE}?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  return (
+    <div className="fade-in" style={{ padding: '16px', maxWidth: 600, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ background: '#ffffff', borderRadius: 16, padding: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+        <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <MessageSquare size={18} color="#6d28d9" /> Messagerie & Commissions Coursier
+        </h3>
+        <p style={{ fontSize: 12, color: '#64748b', lineHeight: 1.4, marginBottom: 14 }}>
+          Retrouvez ici les messages échangés avec les clients et l'assistance. Vous pouvez également valider et transmettre directement votre reçu Wave pour le paiement de la commission du coursier.
+        </p>
+        <button
+          onClick={handleCoursierPaymentQuery}
+          style={{
+            width: '100%',
+            padding: '12px',
+            background: '#25D366',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 12,
+            fontWeight: 700,
+            fontSize: 13,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            cursor: 'pointer'
+          }}
+        >
+          <ExternalLink size={16} /> Confirmer commission coursier (WhatsApp Wave)
+        </button>
+      </div>
+
+      <div style={{ background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', height: '400px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+          <h4 style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', margin: 0 }}>Boîte de réception des messages</h4>
+        </div>
+
+        <div style={{ flex: 1, padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {loadingMsg ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>Chargement des messages...</div>
+          ) : messages.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b', margin: 'auto' }}>
+              <MessageSquare size={36} color="#cbd5e1" style={{ marginBottom: 10 }} />
+              <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>Aucun message pour le moment</p>
+              <span style={{ fontSize: 11, color: '#94a3b8' }}>Les notifications et messages de vos clients apparaîtront ici.</span>
+            </div>
+          ) : (
+            messages.map(msg => {
+              const isMe = msg.senderId === user?.id;
+              return (
+                <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                  <div style={{
+                    maxWidth: '80%',
+                    padding: '10px 14px',
+                    borderRadius: 12,
+                    fontSize: 13,
+                    background: isMe ? '#6d28d9' : '#f1f5f9',
+                    color: isMe ? '#fff' : '#0f172a',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                  }}>
+                    <p style={{ margin: 0, lineHeight: 1.4 }}>{msg.text}</p>
+                  </div>
+                  <span style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, padding: '0 4px' }}>
+                    {msg.timestamp?.toDate ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Récemment'}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <form onSubmit={handleSendMessage} style={{ display: 'flex', padding: 12, borderTop: '1px solid #f1f5f9', background: '#fff', gap: 8 }}>
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Écrire un message..."
+            style={{
+              flex: 1,
+              padding: '10px 14px',
+              borderRadius: 10,
+              border: '1px solid #e2e8f0',
+              fontSize: 13,
+              outline: 'none',
+              background: '#f8fafc'
+            }}
+          />
+          <button
+            type="submit"
+            style={{
+              background: '#6d28d9',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 10,
+              padding: '0 16px',
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: 'pointer'
+            }}
+          >
+            Envoyer
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal de Paiement Wave Intégré ──────────────────────────────────────────
+function RechargeModal({ user, onClose }) {
+  const [whatsappOpened, setWhatsappOpened] = useState(false);
+
+  const openWhatsApp = () => {
+    const hashedPhone = hashPhoneNumber(user?.telephone);
+    const userIdentifier = user 
+      ? `\n(Vendeur: ${user.nomBoutique || user.nomComplet || 'Inconnu'} | Tél: ${hashedPhone} | UID: ${user.id})` 
+      : '';
+    
+    const text = `Bonjour Assistance MAMBO,\nJe prépare mon rechargement de solde via Wave.${userIdentifier}\n\nVoici le reçu de ma transaction pour le contrôle et le crédit immédiat de mon solde.`;
+    
+    window.open(`https://wa.me/225${ADMIN_PHONE}?text=${encodeURIComponent(text)}`, '_blank');
+    setWhatsappOpened(true);
+  };
+
+  const handleWavePay = () => {
+    window.open(WAVE_LINK, '_blank');
+  };
+
+  return (
+    <div className="m-modal-fs fade-in" style={{ zIndex: 1100, background: '#f8fafc', overflowY: 'auto', paddingBottom: 30 }}>
+      <div className="m-modal-header" style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '16px 20px' }}>
+        <button type="button" onClick={onClose}><X size={24}/></button>
+        <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Paiement & Rechargement Wave</h3>
+        <div></div>
+      </div>
+
+      <div style={{ padding: 20, maxWidth: 500, margin: '0 auto' }}>
+        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20, textAlign: 'center' }}>
+          Suivez les étapes ci-dessous pour effectuer votre rechargement de solde en toute sécurité.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ 
+            background: '#fff', 
+            borderRadius: 16, 
+            padding: 16, 
+            border: whatsappOpened ? '1px solid #16a34a' : '2px solid #0284c7',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.03)' 
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <div style={{ 
+                width: 24, height: 24, borderRadius: '50%', background: whatsappOpened ? '#16a34a' : '#0284c7', 
+                color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 
+              }}>
+                {whatsappOpened ? '✓' : '1'}
+              </div>
+              <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Préparer WhatsApp</h4>
+            </div>
+            <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px 34px', lineHeight: 1.4 }}>
+              Ouvrez la discussion avec l'assistance pour pouvoir y partager votre reçu Wave.
+            </p>
+            <div style={{ marginLeft: 34 }}>
+              <button 
+                onClick={openWhatsApp}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: '#25D366',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 10,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  cursor: 'pointer'
+                }}
+              >
+                <MessageSquare size={16} /> Ouvrir la discussion WhatsApp
+              </button>
+            </div>
+          </div>
+
+          <div style={{ 
+            background: '#fff', 
+            borderRadius: 16, 
+            padding: 16, 
+            border: '1px solid #e2e8f0',
+            opacity: whatsappOpened ? 1 : 0.6,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.03)' 
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <div style={{ 
+                width: 24, height: 24, borderRadius: '50%', background: '#64748b', 
+                color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 
+              }}>
+                2
+              </div>
+              <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Payer sur Wave & Transmettre</h4>
+            </div>
+            <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px 34px', lineHeight: 1.4 }}>
+              Effectuez votre paiement sur Wave puis partagez directement le reçu complet dans la discussion.
+            </p>
+            <div style={{ marginLeft: 34 }}>
+              <button 
+                onClick={handleWavePay}
+                disabled={!whatsappOpened}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: whatsappOpened ? '#16a34a' : '#cbd5e1',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 10,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  cursor: whatsappOpened ? 'pointer' : 'not-allowed'
+                }}
+              >
+                <ExternalLink size={16} /> Ouvrir Wave & Payer
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p style={{ fontSize: 11, color: '#64748b', textAlign: 'center', marginTop: 20, lineHeight: 1.5 }}>
+          Le contrôle du reçu complet depuis l'interface Wave garantit le crédit automatique et rapide de votre solde.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal Produit ─────────────────────────────────────────────────────────────
+function ProductModal({ user, product, productCount, onClose, onRequireRecharge }) {
   const [type, setType]       = useState('boutique');
   const [loading, setLoading] = useState(false);
   const [images, setImages]   = useState([]);
-  const [f, setF]             = useState({ nom:'', prix:'', stock:'1', description:'', categorie:'', unite:'pièce' });
+  const [f, setF]             = useState({
+    nom: '', prix: '', stock: '1', description: '', categorie: '', unite: 'pièce'
+  });
+
+  const subCats = useMemo(() => getSubCategories(type), [type]);
 
   useEffect(() => {
     if (product) {
-      setType(product.type || 'boutique');
-      setImages(product.images || (product.image ? [product.image] : []));
-      setF({ ...product });
+      const t = normalizeCategoryId(product.type || 'boutique');
+      setType(t);
+      const existingImages = product.images || (product.image ? [product.image] : []);
+      setImages(existingImages.map((url) =>
+        typeof url === 'string' ? { preview: url, url } : url
+      ));
+      setF({ ...product, categorie: product.categorie || getSubCategories(t)[0] });
     } else {
-      setF({ nom:'', prix:'', stock:'1', description:'', categorie: CATEGORIES_MAP['boutique'][0], unite:'pièce' });
+      const cats = getSubCategories('boutique');
+      setType('boutique');
+      setImages([]);
+      setF({ nom: '', prix: '', stock: '1', description: '', categorie: cats[0], unite: 'pièce' });
     }
   }, [product]);
 
+  const handleTypeChange = (val) => {
+    const resolved = normalizeCategoryId(val);
+    setType(resolved);
+    const cats = getSubCategories(resolved);
+    setF((prev) => ({ ...prev, categorie: cats[0] }));
+  };
+
   const handleSave = async () => {
-    if (!f.nom || !f.prix || images.length === 0) { 
-      toast.error('Nom, Prix et au moins une photo sont obligatoires'); 
-      return; 
+    if (!f.nom || !f.prix || images.length === 0) {
+      toast.error('Nom, Prix et au moins une photo sont obligatoires');
+      return;
     }
+
+    const isNew = !product?.id;
+    const requiresFee = isNew && productCount >= 5;
+
+    if (requiresFee) {
+      const currentJetons = user?.jetons || 0;
+      if (currentJetons < 100) {
+        toast.error("Solde de jetons insuffisant (100 jetons requis pour ce produit supplémentaire).");
+        onClose();
+        onRequireRecharge();
+        return;
+      }
+    }
+
     setLoading(true);
-    
+
     try {
       const urls = [];
       for (let i = 0; i < images.length; i++) {
         const item = images[i];
-
-        // 1. Si c'est déjà une URL Web hébergée (ex: modification d'un produit existant)
         if (typeof item === 'string' && item.startsWith('http')) {
           urls.push(item);
           continue;
         }
-
-        // 2. Extraction du fichier réel si encapsulé dans un objet
-        const fileTarget = (typeof item === 'object' && item !== null) 
-          ? (item.file || item.raw || item) 
-          : item;
-
-        // 3. Envoi vers Cloudinary
+        const fileTarget = (typeof item === 'object' && item !== null) ? (item.file || item.raw || item) : item;
         try {
           const secureUrl = await uploadToCloudinary(fileTarget);
-          if (secureUrl) {
-            urls.push(secureUrl);
-          }
+          if (secureUrl) urls.push(secureUrl);
         } catch (uploadErr) {
-          console.error("Échec upload image index", i, ":", uploadErr);
+          console.error("Échec upload image", uploadErr);
         }
       }
-      
+
       if (urls.length === 0) {
-        throw new Error("Impossible d'uploader les images. Veuillez vérifier votre connexion ou le format d'image.");
+        throw new Error("Impossible d'uploader les images.");
       }
 
       const baseData = {
@@ -565,78 +890,85 @@ function ProductModal({ user, product, onClose }) {
         type,
         images:      urls,
         image:       urls[0] || DEFAULT_PRODUCT,
-        vendorId:    user.id,   
-        vendeurId:   user.id,   
+        vendorId:    user.id,
+        vendeurId:   user.id,
         nomBoutique: user?.nomBoutique || user?.enseigne || user?.nomComplet || '',
         updatedAt:   serverTimestamp(),
       };
 
-      if (product?.id) {
-        await updateDoc(doc(db, 'products', product.id), baseData);
+      const batch = writeBatch(db);
+
+      if (isNew) {
+        const newDocRef = doc(collection(db, 'products'));
+        batch.set(newDocRef, { ...baseData, createdAt: serverTimestamp() });
+
+        if (requiresFee) {
+          const userRef = doc(db, 'users', user.id);
+          batch.update(userRef, { jetons: increment(-100) });
+        }
       } else {
-        await addDoc(collection(db, 'products'), { ...baseData, createdAt: serverTimestamp() });
+        const prodRef = doc(db, 'products', product.id);
+        batch.update(prodRef, baseData);
       }
-        
+
+      await batch.commit();
+
       onClose();
-      toast.success('Produit enregistré avec succès !');
-    } catch (err) { 
-      toast.error(err.message || 'Erreur lors de l\'enregistrement'); 
-    } finally { 
-      setLoading(false); 
+      toast.success(requiresFee ? 'Produit publié ! 100 jetons ont été déduits de votre compte.' : 'Produit enregistré avec succès !');
+    } catch (err) {
+      toast.error(err.message || "Erreur lors de l'enregistrement");
+    } finally {
+      setLoading(false);
     }
   };
-  
+
   return (
     <div className="m-modal-fs fade-in">
       <div className="m-modal-header">
-        <button onClick={onClose}><X size={24}/></button>
-        <h3>{product ? 'Modifier' : 'Nouveau Produit'}</h3>
-        <button onClick={handleSave} className="m-save-btn" disabled={loading}>
+        <button type="button" onClick={onClose}><X size={24}/></button>
+        <h3>{product ? 'Modifier' : 'Nouveau Produit'} {productCount >= 5 && !product ? '(Facturé 100 jetons)' : ''}</h3>
+        <button type="button" onClick={handleSave} className="m-save-btn" disabled={loading}>
           {loading ? <Loader2 className="animate-spin" size={20}/> : 'Publier'}
         </button>
       </div>
-      <div className="m-modal-scroll-body" style={{ padding:20 }}>
-        <CategorieDynamique mode="selection" categorie={type} onSelect={(val) => { setType(val); setF(p => ({ ...p, categorie: CATEGORIES_MAP[val][0] })); }}/>
+
+      <div className="m-modal-scroll-body" style={{ padding: 20 }}>
+        <CategorieDynamique mode="selection" categorie={type} onSelect={handleTypeChange}/>
         <CategorieDynamique mode="photos-only" categorie={type} images={images} setImages={setImages}/>
-        <div style={{ marginTop:20 }}>
+
+        <div style={{ marginTop: 12 }}>
           <FormField label="Nom de l'article *">
             <input type="text" value={f.nom || ''} onChange={e => setF({ ...f, nom: e.target.value })}/>
           </FormField>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <FormField label="Prix (F CFA) *">
               <input type="number" value={f.prix || ''} onChange={e => setF({ ...f, prix: e.target.value })}/>
             </FormField>
-            <FormField label="Catégorie *">
-              <select value={f.categorie || ''} onChange={e => setF({ ...f, categorie: e.target.value })}>
-                {(CATEGORIES_MAP[type] || ['Autre']).map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+            <FormField label="Stock">
+              <input type="text" value={f.stock || ''} onChange={e => setF({ ...f, stock: e.target.value })}/>
             </FormField>
           </div>
+
+          <FormField label="Catégorie *">
+            <select value={f.categorie || ''} onChange={e => setF({ ...f, categorie: e.target.value })}>
+              {subCats.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </FormField>
+
           <FormField label="Description">
             <textarea rows={3} value={f.description || ''} onChange={e => setF({ ...f, description: e.target.value })}/>
           </FormField>
         </div>
-        {product && (
-          <button className="m-btn-delete-prod" onClick={async () => { await deleteDoc(doc(db, 'products', product.id)); onClose(); }}>
-            <Trash2 size={16}/> Supprimer
-          </button>
-        )}
       </div>
     </div>
   );
 }
 
-// ── Vue des Commandes ──────────────────────────────────────────────────────────
-function OrdersView({ orders, completedOrders, onOrderClick, onLaunchTiers, verificationCodes, regeneratingId, onRegenerateCode }) {
+// ── Vue des Commandes ────────────────────────────────────────────────────────
+function OrdersView({ orders, completedOrders, onOrderClick }) {
   const [filter, setFilter] = useState('actives');
   const list = filter === 'actives' ? orders : completedOrders;
-
-  const getStatusStyle = (s = '') => {
-    const st = s.toLowerCase();
-    if (st.includes('paye') || st.includes('attente_livreur')) return { bg:'#d1fae5', color:'#059669' };
-    if (st.includes('prepa')) return { bg:'#dbeafe', color:'#2563eb' };
-    return { bg:'#f1f5f9', color:'#475569' };
-  };
 
   return (
     <div className="m-orders-view fade-in">
@@ -650,170 +982,148 @@ function OrdersView({ orders, completedOrders, onOrderClick, onLaunchTiers, veri
             Aucune commande
           </div>
         )}
-        {list.map(o => {
-          const style = getStatusStyle(o.status);
-          return (
-            <div key={o.id} className="m-order-item-container" style={{ marginBottom: 12, background: '#fff', borderRadius: 16, border: '1px solid #f1f5f9', overflow: 'hidden' }}>
-              <div className="m-order-item" onClick={() => onOrderClick(o.id)} style={{ cursor: 'pointer' }}>
-                <div className="order-main">
-                  <div className="order-user-avatar">{((o.nom || o.clientName || o.nomClient || 'C').charAt(0))}</div>
-                  <div className="order-meta">
-                    <h4>{o.nom || o.clientName || o.nomClient || 'Client'}</h4>
-                    <p>{o.orderId || o.id.substring(0, 8)}</p>
-                  </div>
-                  <div style={{ textAlign:'right' }}>
-                    <p><strong>{Number(o.amount || o.total || 0).toLocaleString()} F</strong></p>
-                    <span className="m-status-badge" style={{ background: style.bg, color: style.color }}>
-                      {o.status}
-                    </span>
-                  </div>
+        {list.map(o => (
+          <div key={o.id} className="m-order-item-container" style={{ marginBottom: 12, background: '#fff', borderRadius: 16, border: '1px solid #f1f5f9', overflow: 'hidden' }}>
+            <div className="m-order-item" onClick={() => onOrderClick(o.id)} style={{ cursor: 'pointer', padding: 16 }}>
+              <div className="order-main" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h4>{o.nom || o.clientName || 'Client'}</h4>
+                  <p style={{ fontSize: 11, color: '#64748b' }}>{o.orderId || o.id.substring(0, 8)}</p>
+                </div>
+                <div style={{ textAlign:'right' }}>
+                  <p><strong>{Number(o.amount || o.total || 0).toLocaleString()} F</strong></p>
+                  <span className="m-status-badge">{o.status}</span>
                 </div>
               </div>
-
-              {filter === 'actives' && (
-                <div style={{ padding: '0 16px 14px 16px', marginTop: -4 }}>
-                  {!o.courseRequested && (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onLaunchTiers(o); }}
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px',
-                        background: '#6d28d9',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '10px',
-                        fontWeight: '700',
-                        fontSize: '12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                      }}
-                    >
-                      <PlusCircle size={14} />
-                      Commander une course pour cette commande
-                    </button>
-                  )}
-
-                  {o.courseRequested && (
-                    <div style={{
-                      padding: '10px 14px',
-                      background: '#f8fafc',
-                      border: '1px dashed #e2e8f0',
-                      borderRadius: '10px',
-                    }}>
-                      {verificationCodes[o.id] === undefined ? (
-                        <span style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8' }}>
-                          Vérification du code...
-                        </span>
-                      ) : verificationCodes[o.id] ? (
-                        <div style={{ textAlign: 'center' }}>
-                          <span style={{ display: 'block', fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>
-                            Code à donner au livreur
-                          </span>
-                          <span style={{ fontSize: 22, fontWeight: 900, letterSpacing: 3, color: '#0f172a' }}>
-                            {verificationCodes[o.id].pickupCode}
-                          </span>
-                        </div>
-                      ) : (
-                        <div style={{ textAlign: 'center' }}>
-                          <span style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#dc2626', marginBottom: 6 }}>
-                            ⚠️ Code de passation non généré
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); onRegenerateCode(o.id); }}
-                            disabled={regeneratingId === o.id}
-                            style={{
-                              padding: '8px 14px',
-                              fontSize: 10,
-                              fontWeight: 800,
-                              color: '#fff',
-                              background: '#dc2626',
-                              border: 'none',
-                              borderRadius: 10,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            {regeneratingId === o.id ? "Génération..." : "Régénérer le code"}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-// ── Vue du Profil ──────────────────────────────────────────────────────────────
-function ProfileView({ user, stats }) {
+// ── Vue du Profil (avec bloc de certification CNI) ──────────────────────────
+function ProfileView({ user, stats, onOpenRecharge, onOpenCniModal }) {
   const boutiqueNom = user?.nomBoutique || user?.enseigne || user?.nomComplet;
   const boutiqueLogo = user?.photoURL || user?.logo || DEFAULT_LOGO;
 
   return (
-    <div className="m-profile-view fade-in">
-      <div className="m-profile-hero">
+    <div className="m-profile-view fade-in" style={{ padding: 16 }}>
+      <div className="m-profile-hero" style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
         <img 
           src={boutiqueLogo} 
           alt={boutiqueNom || "Boutique"}
-          onError={(e) => { e.target.src = DEFAULT_LOGO; }}
-          style={{ 
-            width: 120, 
-            height: 120, 
-            borderRadius: '24px', 
-            border: '4px solid #ffffff',
-            objectFit: 'cover',
-            boxShadow: '0 10px 30px rgba(109, 40, 217, 0.15)'
-          }} 
+          style={{ width: 80, height: 80, borderRadius: '20px', objectFit: 'cover' }} 
         />
-        
-        <div className="profile-info">
-          {boutiqueNom && <h3>{boutiqueNom}</h3>}
-          {user?.telephone && (
-            <p className="vendor-contact">📱 {user.telephone}</p>
+        <div>
+          {boutiqueNom && <h3 style={{ margin: 0, fontSize: 18 }}>{boutiqueNom}</h3>}
+          {user?.telephone && <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b' }}>📱 {hashPhoneNumber(user.telephone)}</p>}
+        </div>
+      </div>
+
+      {/* Bloc certification d'identité CNI */}
+      <div style={{ 
+        borderRadius: 16, 
+        padding: 16, 
+        marginBottom: 20, 
+        background: user?.cniVerified ? '#f0fdf4' : '#fffbeb',
+        border: user?.cniVerified ? '1px solid #bbf7d0' : '1px solid #fef3c7',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {user?.cniVerified ? (
+            <ShieldCheck size={28} color="#16a34a" />
+          ) : (
+            <ShieldAlert size={28} color="#d97706" />
           )}
-        </div>
-      </div>
-
-      <div className="m-stats-grid">
-        <div className="stat-card">
-          <small>Chiffre d'affaires</small>
-          <strong>{Number(stats.chiffreAffaires || 0).toLocaleString()} F</strong>
-        </div>
-        <div className="stat-card">
-          <small>Total Ventes</small>
-          <strong>{stats.totalVentes || 0}</strong>
-        </div>
-        <div className="stat-card">
-          <small>Produits</small>
-          <strong>{stats.totalProduits || 0}</strong>
-        </div>
-      </div>
-
-      <div className="m-profile-details">
-        {user?.emailPersonnel && (
-          <div className="detail-row">
-            <span>✉️ Email</span>
-            <span>{user.emailPersonnel}</span>
+          <div>
+            <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: user?.cniVerified ? '#15803d' : '#b45309' }}>
+              {user?.cniVerified ? 'Identité Certifiée' : 'Compte Non Vérifié'}
+            </h4>
+            <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748b' }}>
+              {user?.cniVerified 
+                ? `CNI validée (${user.cniFullName || 'Nom certifié'})` 
+                : 'Veuillez faire vérifier votre CNI pour débloquer toutes les fonctionnalités.'}
+            </p>
           </div>
-        )}
-        {user?.adresse && (
-          <div className="detail-row">
-            <span>📍 Adresse</span>
-            <span>{user.adresse}</span>
-          </div>
+        </div>
+
+        {!user?.cniVerified && (
+          <button
+            onClick={onOpenCniModal}
+            style={{
+              padding: '8px 12px',
+              background: '#d97706',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 10,
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            Vérifier
+          </button>
         )}
       </div>
 
-      <button className="m-btn-logout-large" onClick={() => signOut(auth)}>
-        <LogOut size={20}/> Déconnexion
+      <div style={{ 
+        background: 'linear-gradient(135deg, #6d28d9 0%, #4c1d95 100%)', 
+        borderRadius: 16, 
+        padding: 20, 
+        color: '#fff', 
+        marginBottom: 20,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxShadow: '0 10px 20px rgba(109, 40, 217, 0.2)'
+      }}>
+        <div>
+          <span style={{ fontSize: 12, opacity: 0.9, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Coins size={16} /> Solde de Jetons
+          </span>
+          <h2 style={{ fontSize: 28, margin: '6px 0 0', fontWeight: 800 }}>
+            {Number(user?.jetons || 0).toLocaleString()} <span style={{ fontSize: 14, fontWeight: 400 }}>jetons</span>
+          </h2>
+        </div>
+        <button 
+          onClick={onOpenRecharge}
+          style={{
+            background: '#ffffff',
+            color: '#6d28d9',
+            border: 'none',
+            padding: '10px 16px',
+            borderRadius: 10,
+            fontWeight: 700,
+            fontSize: 12,
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+          }}
+        >
+          Payer (Wave)
+        </button>
+      </div>
+
+      <div className="m-stats-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
+        <div className="stat-card" style={{ background: '#f8fafc', padding: 12, borderRadius: 12, textAlign: 'center' }}>
+          <small style={{ fontSize: 10, color: '#64748b' }}>CA</small>
+          <strong style={{ display: 'block', fontSize: 14 }}>{Number(stats.chiffreAffaires || 0).toLocaleString()} F</strong>
+        </div>
+        <div className="stat-card" style={{ background: '#f8fafc', padding: 12, borderRadius: 12, textAlign: 'center' }}>
+          <small style={{ fontSize: 10, color: '#64748b' }}>Ventes</small>
+          <strong style={{ display: 'block', fontSize: 14 }}>{stats.totalVentes || 0}</strong>
+        </div>
+        <div style={{ background: '#f8fafc', padding: 12, borderRadius: 12, textAlign: 'center' }}>
+          <small style={{ fontSize: 10, color: '#64748b' }}>Produits</small>
+          <strong style={{ display: 'block', fontSize: 14 }}>{stats.totalProduits || 0}</strong>
+        </div>
+      </div>
+
+      <button className="m-btn-logout-large" onClick={() => signOut(auth)} style={{ width: '100%', padding: '12px', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        <LogOut size={18}/> Déconnexion
       </button>
     </div>
   );

@@ -1,21 +1,15 @@
 import React, { useState, useMemo } from "react";
 import { auth, db } from "../firebase";
-import { 
-  signInWithEmailAndPassword 
-} from "firebase/auth";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import MamboLock from "../components/MamboLock";
-import { 
-  Lock, LogIn, ChevronRight, 
-  Phone, Loader2, ArrowLeft, MapPin 
-} from "lucide-react";
+import { Lock, LogIn, ChevronRight, Phone, Loader2, ArrowLeft, MapPin } from "lucide-react";
 import { cleanPhone, generatePatternPassword } from "../mamboUtils";
 import "./ClientHome.css";
 
 // --- ASSETS ---
-
 import abidjanIllustration from "../assets/abidjan-illustration.jpg";
 import alepeIllustration from "../assets/alepe-illustration.jpg";
 import azaguieIllustration from "../assets/azaguie-illustration.jpg";
@@ -49,67 +43,74 @@ export default function LoginLivreurSecteurs() {
     e.preventDefault();
     if (loading) return;
 
-    const phone = cleanPhone(telephone);
-    if (phone.length !== 10) return toast.error("Numéro WhatsApp invalide.");
+    let phone = cleanPhone(telephone);
+    if (phone.length === 10 && !phone.startsWith("225")) {
+      phone = "225" + phone;
+    }
+
+    if (phone.length !== 13) return toast.error("Numéro WhatsApp invalide (10 chiffres requis).");
     if (pattern.length < 3) return toast.error("Schéma de sécurité trop court.");
 
     setLoading(true);
 
     try {
-      // 1. Recherche du compte par téléphone dans Firestore
-      const usersRef = collection(db, "users");
-      const q = query(usersRef, where("telephone", "==", phone));
-      const querySnapshot = await getDocs(q);
+      // 1. Lecture directe et sécurisée de l'index public par ID de document (le téléphone)
+      const indexDocRef = doc(db, "phoneIndex", phone);
+      const indexSnap = await getDoc(indexDocRef);
 
-      if (querySnapshot.empty) {
+      if (!indexSnap.exists()) {
         setLoading(false);
         return toast.error("Aucun compte associé à ce numéro de téléphone.");
       }
 
-      // 2. Récupération des données du compte existant
-      const userDoc = querySnapshot.docs[0];
-      const userData = userDoc.data();
-      const userRole = userData.role?.toLowerCase().trim();
+      const indexData = indexSnap.data();
+      const technicalEmail = indexData.email; // Récupère l'e-mail technique stocké dans l'index
+      const userRole = indexData.role?.toLowerCase().trim();
 
-      // 3. Vérification du rôle attendu pour cette zone
+      // 2. Vérification du rôle attendu pour cette zone
       if (userRole !== currentSector.role && userRole !== "admin") {
         setLoading(false);
         return toast.error(`Accès refusé : Votre compte n'est pas enregistré pour la zone ${currentSector.name}.`);
       }
 
-      // 4. Pour les zones rurales, vérifier que la zone précise du compte
+      // 3. Pour les zones rurales, vérifier la zone précise
       if (currentSector.isRural && userRole !== "admin") {
-        const userZone = (userData.sectorZone || userData.zone || "").toLowerCase().trim();
+        const userZone = (indexData.sectorZone || indexData.zone || "").toLowerCase().trim();
         if (userZone !== selectedSectorKey) {
           setLoading(false);
           return toast.error(`Ce compte est enregistré pour une autre zone que ${currentSector.name}.`);
         }
       }
 
-      // Vérification locale du schéma saisi par rapport au schéma Firestore enregistré avant l'appel Auth
+      // 4. Vérification locale du schéma saisi par rapport à l'index enregistré
       const inputPatternString = pattern.join("-");
-      if (userData.mamboLockPattern && userData.mamboLockPattern !== inputPatternString) {
+      if (indexData.mamboLockPattern && indexData.mamboLockPattern !== inputPatternString) {
         setLoading(false);
         return toast.error("Code schéma incorrect pour ce numéro.");
       }
 
-      // 5. Extraction de l'email enregistré et génération du mot de passe technique sécurisé
-      const technicalEmail = userData.email;
       const technicalPassword = generatePatternPassword(pattern, phone);
 
-      // 6. Authentification Firebase Auth finale
+      // 5. Authentification Firebase Auth finale via l'e-mail technique
       await signInWithEmailAndPassword(auth, technicalEmail, technicalPassword);
 
-      // 7. Redirection selon le rôle réel du compte
+      // 6. Redirection selon le rôle réel du compte
       if (userRole === "livreur") {
         navigate("/livreur-home", { replace: true });
       } else {
-        const finalZone = userData.sectorZone || userData.zone || selectedSectorKey;
+        const finalZone = indexData.sectorZone || indexData.zone || selectedSectorKey;
         navigate(`/livreur-secteur/${finalZone}`, { replace: true });
       }
+
     } catch (error) {
       console.error("Login Error:", error);
-      toast.error("Échec de la connexion. Vérifiez vos accès réseau ou vos identifiants.");
+      if (error.code === "auth/invalid-credential" || error.code === "auth/wrong-password") {
+        toast.error("Schéma incorrect ou identifiants invalides.");
+      } else if (error.code === "auth/user-not-found") {
+        toast.error("Aucun compte associé à cet e-mail technique.");
+      } else {
+        toast.error(error.message || "Échec de la connexion. Vérifiez vos accès.");
+      }
     } finally {
       setLoading(false);
     }

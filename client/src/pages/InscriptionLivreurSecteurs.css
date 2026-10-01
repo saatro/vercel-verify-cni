@@ -1,6 +1,6 @@
 /* --- Master Wrapper Premium --- */
 .auth-master-wrapper {
-  background: radial-gradient(circle at top right, #1e293b, #0f172a);
+  background: radial-gradient(circle at top right, #f5f6f6, #d8d9daa4);
   min-height: 100vh;
   display: flex;
   justify-content: center;
@@ -25,13 +25,13 @@
   background: transparent;
 }
 .scrollable-auth-zone::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #e6e6e60b;
   border-radius: 5px;
 }
 
 /* --- Carte d'Inscription --- */
 .reg-card {
-  background: rgba(30, 41, 59, 0.7);
+  background: rgba(244, 244, 244, 0.997);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -47,7 +47,7 @@
   font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: -0.025em;
-  color: #ffffff;
+  color: #333232;
 }
 
 .sector-subtitle {
@@ -81,13 +81,13 @@
 /* --- Formulaire & Champs de Saisie --- */
 input, select {
   width: 100%;
-  padding: 14px 16px;
+  padding: 13px 13px;
   margin-bottom: 16px;
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: #e1e1e24d;
+  border: 1px solid #cdced0;
   border-radius: 14px;
-  color: #ffffff;
-  font-size: 0.95rem;
+  color: #383838;
+  font-size: 0.90rem;
   box-sizing: border-box;
   outline: none;
   transition: all 0.2s ease;
@@ -96,7 +96,7 @@ input, select {
 input:focus, select:focus {
   border-color: #10b981;
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
-  background: #1e293b;
+  background: #fcfcfc;
 }
 
 input::placeholder {
@@ -105,7 +105,7 @@ input::placeholder {
 
 /* --- Sélection des Véhicules Horizontale --- */
 .vehicle-selection-title {
-  font-size: 0.85rem;
+  font-size: 0.70rem;
   font-weight: 600;
   color: #94a3b8;
   text-transform: uppercase;
@@ -117,15 +117,16 @@ input::placeholder {
 .vehicle-grid {
   display: flex;
   flex-direction: row;
-  gap: 10px;
+  gap: 3px;
   margin-bottom: 20px;
   overflow-x: auto;
-  padding-bottom: 8px;
-  scrollbar-width: none; /* Masque sur Firefox */
+  padding: 2px 1px;
+  scrollbar-width: thin; /* Masque sur Firefox */
 }
 
 .vehicle-grid::-webkit-scrollbar {
   display: none; /* Masque sur Chrome/Safari */
+  padding: 5px 5px;
 }
 
 .v-btn {
@@ -133,10 +134,10 @@ input::placeholder {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 12px 10px;
-  background: #0f172a;
-  border: 1px solid #334155;
+  gap: 2px;
+  padding: 2px -5px;
+  background: #fdfdfd;
+  border: 1px solid #c5c5c690;
   border-radius: 16px;
   color: #94a3b8;
   cursor: pointer;
@@ -149,12 +150,13 @@ input::placeholder {
 .v-btn img {
   width: 42px;
   height: 42px;
+  padding: -5px;
   object-fit: contain;
   transition: transform 0.2s ease;
 }
 
 .v-btn span {
-  font-size: 0.75rem;
+  font-size: 0.70rem;
   font-weight: 600;
 }
 
@@ -176,16 +178,16 @@ input::placeholder {
 
 /* --- Zone de Verrouillage Pattern --- */
 .pattern-section {
-  background: #0f172a;
+  background: #c4c4c5;
   border: 1px solid #334155;
   border-radius: 16px;
-  padding: 16px;
-  margin-bottom: 18px;
+  padding: 13px;
+  margin-bottom: 15px;
   text-align: center;
 }
 
 .pattern-label {
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   color: #94a3b8;
   margin-bottom: 12px;
   font-weight: 500;
@@ -193,7 +195,7 @@ input::placeholder {
 
 /* --- Upload Grid des Documents --- */
 .docs-upload-sec {
-  margin: 24px 0;
+  margin: 20px 0;
 }
 
 .docs-title {
@@ -218,7 +220,7 @@ input::placeholder {
   justify-content: center;
   gap: 8px;
   padding: 16px 12px;
-  background: #0f172a;
+  background: #ededee;
   border: 2px dashed #334155;
   border-radius: 16px;
   cursor: pointer;
@@ -258,7 +260,7 @@ input::placeholder {
   align-items: flex-start;
   gap: 12px;
   color: #cbd5e1;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   margin: 16px 0;
   cursor: pointer;
   user-select: none;
@@ -288,7 +290,7 @@ input::placeholder {
   border: none;
   border-radius: 14px;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -312,7 +314,7 @@ input::placeholder {
   border-radius: 14px;
   color: #ffffff;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.75rem;
   letter-spacing: 0.025em;
   cursor: pointer;
   margin-top: 20px;

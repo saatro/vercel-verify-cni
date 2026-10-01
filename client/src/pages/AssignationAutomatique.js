@@ -1,23 +1,36 @@
-// Rôle : assigner un LIVREUR à une commande classique (boutique / VTC) avec réassurance Prioritaire du Client
+// Rôle : assigner un LIVREUR à une commande classique (boutique / VTC) par un COURSIER via l'interface centrale
 
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { db, auth } from '../firebase';
 import {
-  collection, query, where, getDocs, getDoc,
-  doc, updateDoc, serverTimestamp, addDoc
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import {
-  ArrowLeft, Loader2, ShieldCheck, 
-  Package, Phone, Bike, Car, AlertCircle, CheckCircle2
+  AlertCircle,
+  ArrowLeft,
+  Bike, Car,
+  CheckCircle2,
+  Loader2,
+  Package, Phone,
+  ShieldCheck,
+  UserCheck
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { auth, db } from '../firebase';
 
 const VehicleIcon = ({ type, mode }) => {
   const t = (type || mode || '').toLowerCase();
-  if (t.includes('moto')) return <Bike size={13}/>;
-  return <Car size={13}/>;
+  if (t.includes('moto')) return <Bike size={13} />;
+  return <Car size={13} />;
 };
 
 export default function AssignationAutomatique() {
@@ -27,8 +40,10 @@ export default function AssignationAutomatique() {
   const [courseDocId, setCourseDocId] = useState(null);
   const [course, setCourse] = useState(null);
   const [livreurs, setLivreurs] = useState([]);
+  const [coursiers, Coursiers] = useState([]); // Liste des coursiers disponibles pour l'assignation centrale
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(null);
+  const [selectedCoursier, setSelectedCoursier] = useState(''); // Coursier choisi pour l'assignation
   const [source, setSource] = useState('orders');
 
   // Chargement de la commande
@@ -77,22 +92,32 @@ export default function AssignationAutomatique() {
     load();
   }, [orderId, navigate]);
 
-  // Chargement des livreurs en ligne
+  // Chargement des livreurs et des coursiers en ligne
   useEffect(() => {
-    const loadLivreurs = async () => {
+    const loadUsers = async () => {
       try {
-        const snap = await getDocs(
+        // Chargement des livreurs
+        const snapLivreurs = await getDocs(
           query(collection(db, 'users'),
             where('role', '==', 'livreur'),
             where('isOnline', '==', true)
           )
         );
-        setLivreurs(snap.docs.map(d => ({ uid: d.id, ...d.data() })));
+        setLivreurs(snapLivreurs.docs.map(d => ({ uid: d.id, ...d.data() })));
+
+        // Chargement des coursiers (rôle coursier)
+        const snapCoursiers = await getDocs(
+          query(collection(db, 'users'),
+            where('role', '==', 'coursier')
+          )
+        );
+        Coursiers(snapCoursiers.docs.map(d => ({ uid: d.id, ...d.data() })));
+
       } catch (e) {
-        console.error("Erreur chargement livreurs:", e);
+        console.error("Erreur chargement utilisateurs:", e);
       }
     };
-    loadLivreurs();
+    loadUsers();
   }, []);
 
   // Validation du reçu Wave + Réassurance PRIORITAIRE du Client & du Vendeur
@@ -130,7 +155,7 @@ export default function AssignationAutomatique() {
           `• *Montant :* *${montantFormate} F CFA*\n` +
           `• *Article :* ${course.nom || "Votre commande"}\n\n` +
           `🛡️ *Sécurité Mambo :* Votre argent est sécurisé et le commerçant prépare votre colis. Un livreur est immédiatement mobilisé pour votre livraison.`;
-        
+
         window.open(`https://wa.me/${clientPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msgClient)}`, '_blank');
       }
 
@@ -140,7 +165,7 @@ export default function AssignationAutomatique() {
         const msgVendeur = `🤝 *ASSISTANCE MAMBO - FONDS EN SÉCURITÉ*\n\n` +
           `Bonjour, le témoin numérique de la commande *#${ref}* (${montantFormate} F CFA) vient d'être validé.\n\n` +
           `Le paiement du client est certifié sur notre interface Wave. Veuillez préparer les articles (*${course.nom || "Colis"}*). Nous vous envoyons le livreur immédiatement.`;
-        
+
         setTimeout(() => {
           window.open(`https://wa.me/${vendeurPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msgVendeur)}`, '_blank');
         }, 800);
@@ -152,26 +177,35 @@ export default function AssignationAutomatique() {
     }
   };
 
-  // Assignation du livreur + Notification Finale
+  // Assignation du livreur par le coursier via l'admin central + Notification Finale
   const handleAssigner = async (livreur) => {
     if (!courseDocId || !course || !auth.currentUser) return;
     if (!course.waveReceiptVerified) {
       toast.error("Veuillez d'abord valider le contrôle du témoin Wave.");
       return;
     }
+    if (!selectedCoursier) {
+      toast.error("Veuillez sélectionner le coursier assignant depuis l'interface centrale.");
+      return;
+    }
     setAssigning(livreur.uid);
 
     try {
+      const coursierObj = coursiers.find(c => c.uid === selectedCoursier);
+      const coursierNomAffiche = coursierObj ? (coursierObj.nomComplet || `${coursierObj.prenom || ''} ${coursierObj.nom || ''}`.trim() || 'Coursier') : 'Administration';
+
       await updateDoc(doc(db, source, courseDocId), {
         livreurId: livreur.uid,
         livreurNom: livreur.nomComplet || `${livreur.prenom || ''} ${livreur.nom || ''}`.trim() || 'Livreur',
         livreurPhone: livreur.telephone || '',
+        coursierId: selectedCoursier,
+        coursierNom: coursierNomAffiche,
         status: 'assigned',
         assignedAt: serverTimestamp(),
         assignedBy: auth.currentUser.uid,
       });
 
-      toast.success(`✅ ${livreur.nomComplet || livreur.nom} assigné !`);
+      toast.success(`✅ ${livreur.nomComplet || livreur.nom} assigné par le coursier ${coursierNomAffiche} !`);
 
       const ref = course.orderId || courseDocId.slice(-6).toUpperCase();
       const dest = course.dropoffAddress || course.dest || '—';
@@ -221,34 +255,34 @@ export default function AssignationAutomatique() {
     <div style={{ minHeight: '100dvh', background: '#f8fafc', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <ToastContainer theme="dark" position="top-center" />
 
-      <header style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: 12, 
-        padding: '14px 16px', 
-        background: '#fff', 
-        borderBottom: course?.waveReceiptVerified ? '2px solid #10b981' : '2px solid #ef4444', 
-        position: 'sticky', 
-        top: 0, 
-        zIndex: 50 
+      <header style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '14px 16px',
+        background: '#fff',
+        borderBottom: course?.waveReceiptVerified ? '2px solid #10b981' : '2px solid #ef4444',
+        position: 'sticky',
+        top: 0,
+        zIndex: 50
       }}>
-        <button 
-          style={{ 
-            width: 36, 
-            height: 36, 
-            borderRadius: '50%', 
-            background: '#f1f5f9', 
-            border: 'none', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center' 
-          }} 
+        <button
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            background: '#f1f5f9',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
           onClick={() => navigate(-1)}
         >
           <ArrowLeft size={20} />
         </button>
         <div style={{ flex: 1 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 900, color: '#0f172a', margin: 0 }}>Rassurer le Client</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 900, color: '#0f172a', margin: 0 }}>Assignation via Admin Central</h2>
           <p style={{ fontSize: 10, color: course?.waveReceiptVerified ? '#10b981' : '#ef4444', fontWeight: 700, margin: 0 }}>
             {course?.waveReceiptVerified ? "Client & Commerçant rassurés ✅" : "Validation témoin numérique attendue ⚠️"}
           </p>
@@ -257,23 +291,23 @@ export default function AssignationAutomatique() {
 
       <div style={{ padding: '16px 16px 80px', maxWidth: 480, margin: '0 auto' }}>
         {course && (
-          <div style={{ 
-            background: '#fff', 
-            borderRadius: 18, 
-            padding: '16px', 
-            boxShadow: '0 1px 4px rgba(0,0,0,.06)', 
+          <div style={{
+            background: '#fff',
+            borderRadius: 18,
+            padding: '16px',
+            boxShadow: '0 1px 4px rgba(0,0,0,.06)',
             marginBottom: 16,
             border: course.waveReceiptVerified ? '1px solid #10b981' : '1px solid #fee2e2'
           }}>
-            
-            <div style={{ 
-              background: course.waveReceiptVerified ? '#f0fdf4' : '#fff5f5', 
-              padding: '12px', 
-              borderRadius: 12, 
-              marginBottom: 14, 
-              display: 'flex', 
+
+            <div style={{
+              background: course.waveReceiptVerified ? '#f0fdf4' : '#fff5f5',
+              padding: '12px',
+              borderRadius: 12,
+              marginBottom: 14,
+              display: 'flex',
               flexDirection: 'column',
-              gap: 8 
+              gap: 8
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {course.waveReceiptVerified ? (
@@ -289,7 +323,7 @@ export default function AssignationAutomatique() {
                 Référence Transaction : <strong style={{ color: '#0f172a' }}>{course.orderId || orderId}</strong><br />
                 Fonds versés par le client : <strong style={{ color: '#0f172a' }}>{Number(course.amount || course.price || 0).toLocaleString()} F CFA</strong>
               </p>
-              
+
               {!course.waveReceiptVerified && (
                 <button
                   onClick={handleValiderRecuWave}
@@ -314,6 +348,35 @@ export default function AssignationAutomatique() {
               )}
             </div>
 
+            {/* SÉLECTION DU COURSIER DEPUIS L'ADMIN CENTRAL */}
+            <div style={{ marginBottom: 14, padding: '12px', background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 6 }}>
+                <UserCheck size={14} color="#6366f1" /> Coursier assignant (Admin Central) :
+              </label>
+              <select
+                value={selectedCoursier}
+                onChange={(e) => setSelectedCoursier(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5e1',
+                  background: '#fff',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: '#0f172a',
+                  outline: 'none'
+                }}
+              >
+                <option value="">-- Sélectionner un coursier --</option>
+                {coursiers.map(c => (
+                  <option key={c.uid} value={c.uid}>
+                    {c.nomComplet || `${c.prenom || ''} ${c.nom || ''}`.trim() || c.email || c.uid}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #f1f5f9' }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Total payé</span>
               <span style={{ fontSize: 20, fontWeight: 900, color: '#0f172a' }}>
@@ -333,13 +396,13 @@ export default function AssignationAutomatique() {
           </div>
         )}
 
-        <h3 style={{ 
-          fontSize: 12, 
-          fontWeight: 800, 
-          color: '#94a3b8', 
-          textTransform: 'uppercase', 
-          letterSpacing: '.06em', 
-          marginBottom: 10 
+        <h3 style={{
+          fontSize: 12,
+          fontWeight: 800,
+          color: '#94a3b8',
+          textTransform: 'uppercase',
+          letterSpacing: '.06em',
+          marginBottom: 10
         }}>
           Livreurs disponibles ({livreurs.length})
         </h3>
@@ -355,33 +418,33 @@ export default function AssignationAutomatique() {
             const nomAffiche = l.nomComplet || `${l.prenom || ''} ${l.nom || ''}`.trim() || 'Livreur';
 
             return (
-              <div key={l.uid} style={{ 
-                background: '#fff', 
-                borderRadius: 18, 
-                padding: '16px', 
-                boxShadow: '0 1px 4px rgba(0,0,0,.06)', 
+              <div key={l.uid} style={{
+                background: '#fff',
+                borderRadius: 18,
+                padding: '16px',
+                boxShadow: '0 1px 4px rgba(0,0,0,.06)',
                 marginBottom: 12,
-                opacity: course?.waveReceiptVerified ? 1 : 0.5
+                opacity: (course?.waveReceiptVerified && selectedCoursier) ? 1 : 0.5
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   {photo ? (
-                    <img 
-                      src={photo} 
-                      alt="" 
-                      style={{ width: 46, height: 46, borderRadius: '50%', objectFit: 'cover', border: '2px solid #ede9fe' }} 
+                    <img
+                      src={photo}
+                      alt=""
+                      style={{ width: 46, height: 46, borderRadius: '50%', objectFit: 'cover', border: '2px solid #ede9fe' }}
                     />
                   ) : (
-                    <div style={{ 
-                      width: 46, 
-                      height: 46, 
-                      borderRadius: '50%', 
-                      background: '#6366f1', 
-                      color: '#fff', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center', 
-                      fontWeight: 900, 
-                      fontSize: 18 
+                    <div style={{
+                      width: 46,
+                      height: 46,
+                      borderRadius: '50%',
+                      background: '#6366f1',
+                      color: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 900,
+                      fontSize: 18
                     }}>
                       {nomAffiche.charAt(0).toUpperCase()}
                     </div>
@@ -390,18 +453,18 @@ export default function AssignationAutomatique() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', margin: 0 }}>{nomAffiche}</p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
-                      <span style={{ 
-                        display: 'inline-flex', 
-                        alignItems: 'center', 
-                        gap: 3, 
-                        background: '#ede9fe', 
-                        color: '#6366f1', 
-                        borderRadius: 100, 
-                        padding: '2px 8px', 
-                        fontSize: 9, 
-                        fontWeight: 800 
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        background: '#ede9fe',
+                        color: '#6366f1',
+                        borderRadius: 100,
+                        padding: '2px 8px',
+                        fontSize: 9,
+                        fontWeight: 800
                       }}>
-                        <VehicleIcon type={l.typeVehicule} mode={l.modeVtc} /> 
+                        <VehicleIcon type={l.typeVehicule} mode={l.modeVtc} />
                         {l.typeVehicule || l.modeVtc || 'Moto'}
                       </span>
                     </div>
@@ -420,10 +483,10 @@ export default function AssignationAutomatique() {
                       color: '#fff',
                       fontWeight: 800,
                       fontSize: 12,
-                      cursor: course?.waveReceiptVerified ? 'pointer' : 'not-allowed',
-                      background: !course?.waveReceiptVerified ? '#cbd5e1' : assigning === l.uid ? '#e2e8f0' : '#6366f1',
+                      cursor: (course?.waveReceiptVerified && selectedCoursier) ? 'pointer' : 'not-allowed',
+                      background: (!course?.waveReceiptVerified || !selectedCoursier) ? '#cbd5e1' : assigning === l.uid ? '#e2e8f0' : '#6366f1',
                     }}
-                    disabled={!course?.waveReceiptVerified || !!assigning}
+                    disabled={!course?.waveReceiptVerified || !selectedCoursier || !!assigning}
                     onClick={() => handleAssigner(l)}
                   >
                     {assigning === l.uid ? (

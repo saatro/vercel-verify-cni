@@ -82,12 +82,11 @@ export default function PrintableQrPage() {
         <p className="print-hint">Cliquez sur les boutons pour partager le lien d'installation.</p>
       </div>
 
-      {/* Zone imprimable (inchangée) */}
+      {/* Zone imprimable */}
       <div className="printable-card">
         <div className="printable-header">
           <div className="brand-badge">
             <img src={mamboLogo} alt="MAMBO Logo" className="brand-logo" />
-            
           </div>
           <p className="brand-tagline">LIVRAISON RAPIDE & SÉCURISÉE</p>
         </div>
@@ -113,8 +112,6 @@ export default function PrintableQrPage() {
             <span>OUVERTURE DIRECTE SANS TÉLÉCHARGEMENT STORE</span>
           </div>
         </div>
-
-       
 
         <div className="printable-footer">
           <div className="security-notice">

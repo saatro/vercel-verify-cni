@@ -1,253 +1,390 @@
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import { ChevronLeft, Loader2, ShoppingCart, ShieldCheck } from 'lucide-react';
-import { useCart } from '../Context/CartContext';
-import { toast, ToastContainer } from 'react-toastify';
+import React, { useState, useEffect, useMemo } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { db } from "../firebase";
+import { doc, getDoc, collection, query, where, limit, getDocs } from "firebase/firestore";
+import {
+  ChevronLeft,
+  Loader2,
+  ShoppingCart,
+  ShieldCheck,
+  Store,
+  ChevronRight,
+} from "lucide-react";
+import { useCart } from "../Context/CartContext";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import "./ProductDetails.css";
+
+/** Alias type produit */
+function normalizeType(p) {
+  const raw = (p?.type || p?.categorie || "").toLowerCase().trim();
+  if (raw === "supermarche" || raw === "supermarket") return "supermarket";
+  if (raw === "resto" || raw === "fastfood") return "resto_fastfood";
+  return raw;
+}
+
+function getVendorId(productData) {
+  if (!productData) return null;
+  return (
+    productData.vendeurId ||
+    productData.vendorId ||
+    productData.uid ||
+    productData.storeId ||
+    productData.sellerId ||
+    productData.userId ||
+    null
+  );
+}
 
 export default function ProductDetails() {
-  // Extraction sécurisée des paramètres d'URL
   const { productId } = useParams();
   const navigate = useNavigate();
-  const { addToCart } = useCart();
+  const { addToCart, cart } = useCart();
 
   const [product, setProduct] = useState(null);
+  const [vendor, setVendor] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeImgIndex, setActiveImgIndex] = useState(0);
-
-  // Fonction unifiée pour extraire l'ID du vendeur
-  const getVendorId = (productData) => {
-    return (
-      productData.vendeurId ||
-      productData.vendorId ||
-      productData.uid ||
-      productData.storeId ||
-      productData.sellerId ||
-      productData.userId ||
-      null
-    );
-  };
 
   useEffect(() => {
     let isMounted = true;
 
     const fetchProductData = async () => {
-      // Nettoyage de sécurité au cas où l'identifiant contient des caractères de routage corrompus
-      const cleanProductId = productId ? productId.replace(/\//g, '').trim() : null;
-
+      const cleanProductId = productId ? productId.replace(/\//g, "").trim() : null;
       if (!cleanProductId) {
         toast.error("Identifiant du produit invalide");
         setLoading(false);
-        navigate('/');
+        navigate("/marketplace");
         return;
       }
 
       try {
         setLoading(true);
-        const pDoc = await getDoc(doc(db, 'products', cleanProductId));
-        
+        const pDoc = await getDoc(doc(db, "products", cleanProductId));
+
         if (!pDoc.exists()) {
           toast.error("Ce produit n'existe plus ou a été retiré");
           if (isMounted) {
             setProduct(null);
-            setLoading(false); // VERROU : Arrêt indispensable du spinner si le document est introuvable
+            setLoading(false);
           }
           return;
         }
 
-        if (isMounted) {
-          const data = pDoc.data();
-          setProduct({ 
-            id: pDoc.id, 
-            ...data,
-            // Prise en charge unifiée de l'image principale par défaut
-            imageUrl: data.images?.[0] || data.image || data.imageUrl || null
-          });
+        const data = pDoc.data();
+        const full = {
+          id: pDoc.id,
+          ...data,
+          imageUrl: data.images?.[0] || data.image || data.imageUrl || null,
+        };
+
+        if (isMounted) setProduct(full);
+
+        // Enrichissement vendeur
+        const vid = getVendorId(full);
+        if (vid) {
+          try {
+            const vSnap = await getDoc(doc(db, "users", vid));
+            if (vSnap.exists() && isMounted) {
+              const vd = vSnap.data();
+              setVendor({
+                id: vid,
+                nom: vd.enseigne || vd.nomBoutique || vd.nomComplet || vd.nom || "Boutique Mambo",
+                logo: vd.photoURL || vd.logo || null,
+              });
+            }
+          } catch (_) {}
         }
+
+        // Suggestions même catégorie
+        try {
+          const t = normalizeType(full);
+          const qSug = query(collection(db, "products"), limit(12));
+          const sugSnap = await getDocs(qSug);
+          if (isMounted) {
+            const list = sugSnap.docs
+              .map((d) => ({ id: d.id, ...d.data() }))
+              .filter(
+                (p) =>
+                  p.id !== full.id &&
+                  p.nom &&
+                  (normalizeType(p) === t || !t) &&
+                  (p.images?.[0] || p.image || p.imageUrl)
+              )
+              .slice(0, 6);
+            setSuggestions(list);
+          }
+        } catch (_) {}
       } catch (e) {
-        console.error("Erreur de récupération de la fiche produit :", e);
+        console.error("Erreur fiche produit:", e);
         toast.error("Impossible de charger les détails du produit");
       } finally {
-        // Sécurité ultime : le chargement est systématiquement débrayé quoi qu'il arrive
-        if (isMounted) {
-          setLoading(false);
-        }
+        if (isMounted) setLoading(false);
       }
     };
 
     fetchProductData();
-
     return () => {
       isMounted = false;
     };
   }, [productId, navigate]);
+
+  const images = useMemo(() => {
+    if (!product) return [];
+    if (Array.isArray(product.images) && product.images.length) return product.images;
+    const one = product.imageUrl || product.image;
+    return one ? [one] : [];
+  }, [product]);
+
+  const isPromo =
+    product?.isPromo &&
+    product?.prixPromo &&
+    Number(product.prixPromo) < Number(product.prix);
+  const currentPrice = isPromo ? product.prixPromo : product?.prix;
+  const productType = normalizeType(product);
+  const isSupermarket = productType === "supermarket";
+  const cartCount = Array.isArray(cart) ? cart.length : 0;
 
   const handleAddToCart = () => {
     if (!product) return;
     addToCart({
       ...product,
       quantity: 1,
-      image: product.images?.[0] || product.image || product.imageUrl || 'https://placehold.co/300x300/1e293b/94a3b8/png?text=Produit'
+      image: images[0] || "https://placehold.co/300x300/1e293b/94a3b8/png?text=Produit",
+      vendorId: getVendorId(product),
+      vendeurId: getVendorId(product),
     });
     toast.success(`${product.nom} ajouté au panier !`);
   };
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', gap: '12px', color: '#64748b' }}>
+      <div className="product-details-page" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "80vh", gap: 12, color: "#64748b" }}>
         <Loader2 className="animate-spin" color="#7c3aed" size={32} />
-        <p style={{ fontSize: '14px', fontWeight: 500 }}>Analyse des détails du produit...</p>
+        <p style={{ fontSize: 14, fontWeight: 500 }}>Chargement du produit…</p>
       </div>
     );
   }
 
   if (!product) {
     return (
-      <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-        <p style={{ color: '#ef4444', marginBottom: '16px', fontWeight: 600 }}>Fiche produit indisponible</p>
-        <button 
-          onClick={() => navigate('/')}
-          style={{ padding: '10px 20px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}
+      <div className="product-details-page" style={{ padding: "40px 20px", textAlign: "center" }}>
+        <p style={{ color: "#ef4444", marginBottom: 16, fontWeight: 600 }}>Fiche produit indisponible</p>
+        <button
+          onClick={() => navigate("/marketplace")}
+          style={{ padding: "10px 20px", background: "#7c3aed", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}
         >
-          Retour à l'accueil
+          Retour au marché
         </button>
       </div>
     );
   }
 
-  // Calcul du prix (gestion des promotions éventuelles)
-  const isPromo = product.isPromo && product.prixPromo && Number(product.prixPromo) < Number(product.prix);
-  const currentPrice = isPromo ? product.prixPromo : product.prix;
+  const vendorId = getVendorId(product);
 
   return (
-    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '16px', minHeight: '100vh', background: '#fff' }}>
-      <ToastContainer theme="dark" position="top-center" autoClose={1500} hideProgressBar />
-      
-      {/* Barre de navigation haute */}
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <button onClick={() => navigate(-1)} style={{ border: 'none', background: '#f1f5f9', padding: '10px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div className="product-details-page">
+      <ToastContainer theme="light" position="top-center" autoClose={1500} hideProgressBar />
+
+      <header className="details-header-premium">
+        <button type="button" className="back-circle-btn" onClick={() => navigate(-1)} aria-label="Retour">
           <ChevronLeft size={22} color="#1e293b" />
         </button>
-        <span style={{ fontSize: '13px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          Détails de l'article
-        </span>
-        <div style={{ width: '42px' }}></div>
+        <h1 className="header-center-title">Détails</h1>
+        <button type="button" className="cart-circle-btn" style={{ position: "relative" }} onClick={() => navigate("/cart")} aria-label="Panier">
+          <ShoppingCart size={18} color="#1e293b" />
+          {cartCount > 0 && (
+            <span style={{ position: "absolute", top: 4, right: 4, background: "#ef4444", color: "#fff", fontSize: 9, fontWeight: 900, borderRadius: 99, minWidth: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {cartCount}
+            </span>
+          )}
+        </button>
       </header>
 
-      {/* Rendu visuel du produit */}
-      <div style={{ position: 'relative', borderRadius: '16px', overflow: 'hidden', background: '#f8fafc', marginBottom: '20px', aspectRatio: '1/1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <img 
-          src={product.images?.[activeImgIndex] || product.image || product.imageUrl || 'https://placehold.co/300x300/1e293b/94a3b8/png?text=Produit'} 
-          alt={product.nom}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-        />
-        
-        {product.images?.length > 1 && (
-          <div style={{ position: 'absolute', bottom: '12px', left: '0', right: '0', display: 'flex', justifyContent: 'center', gap: '6px' }}>
-            {product.images.map((_, i) => (
-              <button 
-                key={i}
-                onClick={() => setActiveImgIndex(i)}
-                style={{ width: '8px', height: '8px', borderRadius: '50%', border: 'none', padding: 0, background: i === activeImgIndex ? '#7c3aed' : '#cbd5e1', transition: 'all 0.2s', cursor: 'pointer' }}
-              />
-            ))}
+      <div className="details-container">
+        {/* Galerie */}
+        <section className="images-section-v4">
+          <div className="main-image-container">
+            <img
+              src={images[activeImgIndex] || "https://placehold.co/600x600/f1f5f9/94a3b8/png?text=Produit"}
+              alt={product.nom}
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = "https://placehold.co/600x600/f1f5f9/94a3b8/png?text=Produit";
+              }}
+            />
+            <span className="category-tag-float">
+              {product.type || product.categorie || "Général"}
+            </span>
           </div>
-        )}
+          {images.length > 1 && (
+            <div className="thumbnails-row">
+              {images.map((src, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className={`thumb-box ${i === activeImgIndex ? "active" : ""}`}
+                  onClick={() => setActiveImgIndex(i)}
+                >
+                  <img src={src} alt="" />
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Infos */}
+        <section>
+          <h2 className="product-title-v4">{product.nom}</h2>
+
+          <div className="price-container-v4">
+            <span className="main-price">
+              {Number(currentPrice || 0).toLocaleString()}
+              <span> F</span>
+            </span>
+            {isPromo && (
+              <span className="old-price-v4">
+                {Number(product.prix || 0).toLocaleString()} F
+              </span>
+            )}
+            {product.unite && String(product.unite).trim() && String(product.unite).toLowerCase() !== "n/a" && String(product.unite).toLowerCase() !== "pièce" && (
+              <span style={{ fontSize: 14, color: "#64748b", fontWeight: 600 }}>
+                / {product.unite}
+              </span>
+            )}
+          </div>
+
+          {product.stock !== undefined && Number(product.stock) <= 0 && (
+            <span className="stock-alert">Rupture de stock</span>
+          )}
+
+          {/* Vendeur */}
+          {(vendor || product.nomBoutique) && (
+            <div
+              className="vendor-strip-premium"
+              onClick={() => vendorId && navigate(`/store/${vendorId}`)}
+              role="button"
+              tabIndex={0}
+            >
+              {vendor?.logo ? (
+                <img src={vendor.logo} alt="" className="v-logo" />
+              ) : (
+                <div className="v-logo" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Store size={20} color="#7c3aed" />
+                </div>
+              )}
+              <div className="v-info">
+                <span className="v-name">{vendor?.nom || product.nomBoutique || "Boutique Mambo"}</span>
+                <span className="v-badge">
+                  <ShieldCheck size={12} /> Vendeur Mambo
+                </span>
+              </div>
+              <ChevronRight size={18} color="#94a3b8" />
+            </div>
+          )}
+
+          {/* Fiche technique dynamique selon l'activité */}
+          {(() => {
+            const t = productType;
+            const specs = product.detailsSpecifiques || {};
+            const rows = [];
+            if (t === "supermarket") {
+              if (product.marque) rows.push(["Marque", product.marque]);
+              if (product.poidsVolume) rows.push(["Contenance", product.poidsVolume]);
+              if (product.temperature) rows.push(["Conservation", product.temperature]);
+              if (product.datelimit) rows.push(["DLC / DLUO", product.datelimit, true]);
+              if (product.conditionnement) rows.push(["Conditionnement", product.conditionnement]);
+              if (product.unite) rows.push(["Unité", product.unite]);
+            } else if (t === "vehicule") {
+              [["marque_auto","Marque"],["modele_annee","Modèle"],["boite","Boîte"],["energie","Carburant"],["kilometrage","Km"],["etat_auto","État"]].forEach(([k,l]) => {
+                const v = specs[k] || product[k];
+                if (v) rows.push([l, String(v)]);
+              });
+            } else if (t === "immobilier") {
+              [["type_immo","Bien"],["transaction","Contrat"],["pieces","Pièces"],["surface","Surface m²"],["localisation","Quartier"]].forEach(([k,l]) => {
+                if (specs[k]) rows.push([l, String(specs[k])]);
+              });
+            } else if (t === "resto_fastfood") {
+              [["tempsPrep","Préparation"],["portion","Portion"],["epice","Épices"],["ingredients","Ingrédients"]].forEach(([k,l]) => {
+                const v = product[k] || specs[k];
+                if (v) rows.push([l, String(v)]);
+              });
+            } else {
+              Object.entries(specs).forEach(([k, v]) => {
+                if (v) rows.push([k.replace(/_/g, " "), String(v)]);
+              });
+            }
+            if (!rows.length && !product.allergenes) return null;
+            return (
+              <div className="specs-grid-v4">
+                <div className="specs-grid-title">Fiche technique</div>
+                {rows.map(([label, value, danger]) => (
+                  <div key={label} className="spec-item">
+                    <span className="spec-label">{label}</span>
+                    <span className={`spec-value${danger ? " danger" : ""}`}>{value}</span>
+                  </div>
+                ))}
+                {product.allergenes && (
+                  <div className="spec-allergenes">
+                    <ShieldCheck size={14} />
+                    <span><strong>Allergènes :</strong> {product.allergenes}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {product.description && (
+            <div className="description-container-v4">
+              <div className="desc-label">Description</div>
+              <p className="desc-content">{product.description}</p>
+            </div>
+          )}
+
+          {/* Suggestions */}
+          {suggestions.length > 0 && (
+            <div className="suggestions-section-v4">
+              <div className="suggestion-header">
+                <h3>Vous aimerez aussi</h3>
+              </div>
+              <div className="suggestion-scroll-v4">
+                {suggestions.map((s) => {
+                  const img = s.images?.[0] || s.imageUrl || s.image;
+                  return (
+                    <div
+                      key={s.id}
+                      className="suggestion-card-v4"
+                      onClick={() => navigate(`/product/${s.id}`)}
+                    >
+                      <div className="s-img-holder">
+                        <img src={img} alt={s.nom} />
+                      </div>
+                      <h4>{s.nom}</h4>
+                      <p>{Number(s.prixPromo || s.prix || 0).toLocaleString()} F</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
       </div>
 
-      {/* Informations Textuelles */}
-      <main style={{ padding: '0 4px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <span style={{ background: '#f3e8ff', color: '#6b21a8', fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '20px', textTransform: 'uppercase' }}>
-            {product.type || product.categorie || 'Général'}
-          </span>
-          {product.marque && (
-            <span style={{ background: '#e2e8f0', color: '#334155', fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '20px' }}>
-              {product.marque}
-            </span>
-          )}
+      <div className="action-footer-fixed">
+        <div className="action-price-summary">
+          <small>Total</small>
+          <strong>{Number(currentPrice || 0).toLocaleString()} F</strong>
         </div>
-
-        <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', lineHeight: '1.3', marginBottom: '12px' }}>
-          {product.nom}
-        </h1>
-
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '20px' }}>
-          <span style={{ fontSize: '26px', fontWeight: 900, color: '#7c3aed' }}>
-            {Number(currentPrice || 0).toLocaleString()}
-          </span>
-          <span style={{ fontSize: '16px', fontWeight: 800, color: '#7c3aed', marginRight: '4px' }}>F</span>
-          
-          {isPromo && (
-            <span style={{ fontSize: '16px', color: '#94a3b8', textDecoration: 'line-through', marginRight: '8px', fontWeight: 500 }}>
-              {Number(product.prix || 0).toLocaleString()} F
-            </span>
-          )}
-
-          {product.unite && (
-            <span style={{ fontSize: '14px', color: '#64748b', fontWeight: 600 }}>
-              / {product.unite}
-            </span>
-          )}
-        </div>
-
-        {/* Bloc Spécificités Supermarché */}
-        {(product.type === 'supermarche' || product.type === 'supermarket') && (
-          <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '14px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px', border: '1px solid #e2e8f0' }}>
-            <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.5px' }}>FICHE TECHNIQUE TRACABILITÉ</span>
-            
-            {product.poidsVolume && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: '#64748b', fontWeight: 500 }}>Contenance / Volume</span>
-                <span style={{ color: '#0f172a', fontWeight: 700 }}>{product.poidsVolume}</span>
-              </div>
-            )}
-            {product.temperature && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: '#64748b', fontWeight: 500 }}>Conservation</span>
-                <span style={{ color: '#0f172a', fontWeight: 700 }}>{product.temperature}</span>
-              </div>
-            )}
-            {product.datelimit && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: '#64748b', fontWeight: 500 }}>Date Limite (DLC)</span>
-                <span style={{ color: '#ef4444', fontWeight: 700 }}>{product.datelimit}</span>
-              </div>
-            )}
-            {product.conditionnement && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: '#64748b', fontWeight: 500 }}>Format Emballage</span>
-                <span style={{ color: '#475569', fontWeight: 600 }}>{product.conditionnement}</span>
-              </div>
-            )}
-            {product.allergenes && (
-              <div style={{ marginTop: '4px', paddingTop: '10px', borderTop: '1px dashed #cbd5e1', fontSize: '12px', color: '#b45309', display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-                <ShieldCheck size={14} style={{ marginTop: '2px', flexShrink: 0 }} />
-                <span><strong>Allergènes signalés :</strong> {product.allergenes}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Bloc Description Standard */}
-        {product.description && (
-          <div style={{ marginBottom: '100px' }}>
-            <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Description</h4>
-            <p style={{ fontSize: '14px', color: '#64748b', lineHeight: '1.6', margin: 0 }}>{product.description}</p>
-          </div>
-        )}
-      </main>
-
-      {/* Barre d'Action Flottante Basse */}
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', padding: '16px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'center', zIndex: 100 }}>
-        <button 
+        <button
+          type="button"
+          className="buy-now-btn"
           onClick={handleAddToCart}
-          style={{ width: '100%', maxWidth: '568px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: '12px', padding: '14px', fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)' }}
+          disabled={product.stock !== undefined && Number(product.stock) <= 0}
         >
           <ShoppingCart size={18} />
-          <span>Ajouter au panier</span>
+          Ajouter au panier
         </button>
       </div>
     </div>

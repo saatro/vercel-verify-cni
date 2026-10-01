@@ -1,154 +1,343 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
-import { db, auth } from "../firebase";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  collection,
-  onSnapshot,
-  query,
-  where,
-  doc,
-  updateDoc,
-  setDoc,
-  serverTimestamp,
-  increment,
-  runTransaction,
-  orderBy
-} from "firebase/firestore";
-
+  CheckCircle2,
+  Loader2,
+  Navigation,
+  Phone,
+  Menu,
+  Wallet,
+  Coins,
+  Power,
+  QrCode,
+  Zap,
+  X,
+  AlertCircle,
+  ShoppingBag,
+  ShieldCheck,
+  MapPin,
+  User,
+} from "lucide-react";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-
+import { auth, db } from "../firebase";
 import {
-  Wallet, Power, ChevronRight, Loader2, Menu,
-  ShoppingBag, Zap,
-  Phone, MapPin, AlertCircle, CheckCircle2, QrCode, ShieldCheck, Coins, KeyRound,
-  X, UploadCloud, ArrowRight
-} from "lucide-react";
+  doc,
+  setDoc,
+  getDoc,
+  onSnapshot,
+  updateDoc,
+  serverTimestamp,
+  runTransaction,
+  query,
+  collection,
+  where,
+  or,
+  increment,
+  addDoc,
+  getDocs,
+  limit,
+} from "firebase/firestore";
 
-import { functions } from "../firebase";
-import { httpsCallable } from "firebase/functions";
-import { useWaveScan } from "../hooks/useWaveScan";
-import TaxiMeter from "../components/TaxiMeter";
-import UltimateDrivingView from "../components/UltimateDrivingView";
 import SideMenu from "../components/SideMenu";
+import UltimateDrivingView from "../components/UltimateDrivingView";
+import "./LivreurHome.css";
 
-import imgSaloni from "../assets/saloni.png";
-import imgAntara from "../assets/antara.png";
-import imgMoto from "../assets/moto.png";
-import imgVtc from "../assets/vtc.png";
-import imgMoto2 from "../assets/driver-marker.png"; // (Ajustez le nom/chemin selon votre fichier)
+import clientMarkerImg from "../assets/marker-client.png";
+import livreurMarkerImg from "../assets/marker-livreur.png";
+import suvMarkerImg from "../assets/marker-suv.png";
+import taxiMarkerImg from "../assets/marker-taxi.png";
+import vtcEcoMarkerImg from "../assets/marker-vct-eco.png";
+import vtcConfortMarkerImg from "../assets/marker-vtc-confort.png";
 
-const VEHICLE_IMAGES = {
-  
-  moto: imgMoto2,
-  saloni: imgSaloni,
-  antara: imgAntara,
-  vtc: imgVtc,
-};
+// --- Envoi d'un message in-app générique ---
+async function sendInAppMessage({ receiverId, text, orderId, orderDocId, courseId, type, extraData = {} }) {
+  if (!receiverId || !text) return;
+  try {
+    await addDoc(collection(db, "inAppMessages"), {
+      orderId: orderId || courseId,
+      orderDocId: orderDocId || null,
+      courseId: courseId || null,
+      senderId: "system_mambo",
+      senderName: "Mambo - Suivi de commande",
+      receiverId: receiverId,
+      text: text,
+      timestamp: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      read: false,
+      role: "system",
+      ...(type ? { type } : {}),
+      ...extraData,
+    });
+  } catch (e) {
+    console.error("Erreur création message inApp :", e);
+  }
+}
 
-const DEFAULT_ABIDJAN_CENTER = [5.3484, -4.0305];
-const ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3";
+// --- Envoi d'un message in-app au client ---
+async function sendClientInAppMessage({ mission, text, type, extraData }) {
+  if (!mission || !text) return;
+  const docIdCandidates = [mission.orderId, mission.linkedOrderId, mission.id].filter(Boolean);
+  let clientId = mission.clientId || mission.clientUserId || mission.userId || null;
+  let humanOrderId = null;
+  let orderDocId = null;
 
-const clientIcon = L.divIcon({
-  html: `<div style="width:32px;height:32px;background:#10b981;border-radius:50%;border:3px solid white;box-shadow:0 6px 15px rgba(16,185,129,0.4);display:flex;align-items:center;justify-content:center"><div style="width:12px;height:12px;background:white;border-radius:50%"></div></div>`,
-  iconSize: [32, 32], iconAnchor: [16, 16], className: "",
-});
+  for (const candidate of docIdCandidates) {
+    try {
+      const snap = await getDoc(doc(db, "orders", candidate));
+      if (snap.exists()) {
+        const od = snap.data();
+        orderDocId = snap.id;
+        humanOrderId = od.orderId || null;
+        clientId = od.clientId || od.userId || clientId;
+        break;
+      }
+    } catch (e) {
+      console.warn("Lecture commande impossible :", e);
+    }
+  }
 
-const destinationIcon = L.divIcon({
-  html: `<div style="width:32px;height:32px;background:#ef4444;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid white;box-shadow:0 6px 15px rgba(239,68,68,0.4);display:flex;align-items:center;justify-content:center"><div style="transform:rotate(45deg);color:white;font-weight:900;font-size:10px">FIN</div></div>`,
-  iconSize: [32, 32], iconAnchor: [16, 32], className: "",
-});
+  if (!clientId) {
+    console.warn("Message in-app non envoyé : client introuvable pour la course", mission.id);
+    return;
+  }
 
-const getRotatedDriverIcon = (vehicleType, rotation = 0) => {
-  const type = (vehicleType || "moto").toLowerCase().trim();
-  let iconUrl = imgMoto;
-  if (VEHICLE_IMAGES[type]) iconUrl = VEHICLE_IMAGES[type];
-  
+  await sendInAppMessage({
+    receiverId: clientId,
+    text,
+    orderId: humanOrderId || orderDocId || docIdCandidates[0] || mission.id,
+    orderDocId,
+    courseId: mission.id,
+    type,
+    extraData,
+  });
+}
+
+// --- Notification de l'arrivée du livreur chez le client (Envoyé au VENDEUR) ---
+async function notifyVendeurArrivalAtClient(mission) {
+  if (!mission) return;
+  let vendeurId = mission.vendeurId || mission.sellerId || mission.storeId || null;
+  const docIdCandidates = [mission.orderId, mission.linkedOrderId, mission.id].filter(Boolean);
+  let humanOrderId = null;
+  let orderDocId = null;
+
+  for (const candidate of docIdCandidates) {
+    try {
+      const snap = await getDoc(doc(db, "orders", candidate));
+      if (snap.exists()) {
+        const od = snap.data();
+        orderDocId = snap.id;
+        humanOrderId = od.orderId || null;
+        vendeurId = od.vendeurId || od.sellerId || vendeurId;
+        break;
+      }
+    } catch (e) {
+      console.warn("Erreur lecture commande vendeur :", e);
+    }
+  }
+
+  if (!vendeurId) {
+    console.warn("Vendeur non trouvé pour la notification d'arrivée.");
+    return;
+  }
+
+  await sendInAppMessage({
+    receiverId: vendeurId,
+    text: `📍 Le livreur est arrivé à l'adresse du client pour la commande #${humanOrderId || orderDocId || mission.id}.`,
+    orderId: humanOrderId || orderDocId || mission.id,
+    orderDocId,
+    courseId: mission.id,
+    type: "vendeur_arrival_alert",
+  });
+}
+
+// --- Invitation au Paiement Wave envoyée au CLIENT avant la livraison finale ---
+async function sendPaymentRequestToClient(mission) {
+  if (!mission) return;
+
+  let vendeurId = mission.vendeurId || mission.sellerId || mission.storeId || null;
+  let articleAmount = 0;
+  const deliveryFee =
+    Number(mission.price || mission.proposedPrice || mission.finalPrice || mission.basePrice || 0) || 1000;
+
+  const docIdCandidates = [mission.orderId, mission.linkedOrderId, mission.id].filter(Boolean);
+  let humanOrderId = null;
+  let orderDocId = null;
+
+  // 1. Lecture de la commande pour récupérer l'ID du vendeur et le montant des articles
+  for (const candidate of docIdCandidates) {
+    try {
+      const snap = await getDoc(doc(db, "orders", candidate));
+      if (snap.exists()) {
+        const od = snap.data();
+        orderDocId = snap.id;
+        humanOrderId = od.orderId || null;
+        vendeurId = od.vendeurId || od.sellerId || od.storeId || vendeurId;
+        articleAmount = Number(od.amount || od.montantArticles || od.totalAmount || od.prixTotal || articleAmount);
+        break;
+      }
+    } catch (e) {
+      console.warn("Erreur lecture details paiement :", e);
+    }
+  }
+
+  // 2. Récupération directe du numéro du vendeur dans la collection 'users' (champ 'telephone')
+  let vendeurWaveNumber = "";
+  if (vendeurId) {
+    try {
+      const vendeurDoc = await getDoc(doc(db, "users", vendeurId));
+      if (vendeurDoc.exists()) {
+        const vData = vendeurDoc.data();
+        vendeurWaveNumber = vData.telephone || "";
+      }
+    } catch (e) {
+      console.warn("Erreur profil vendeur Wave :", e);
+    }
+  }
+
+  const paymentUrl = `/payer-vendeur?orderId=${encodeURIComponent(humanOrderId || orderDocId || mission.id)}&vendeurId=${encodeURIComponent(vendeurId || "")}&amount=${articleAmount}&deliveryFee=${deliveryFee}`;
+  const messageText = `💳 Le livreur est à votre adresse. Merci d'effectuer le règlement de ${articleAmount.toLocaleString("fr-FR")} FCFA au vendeur via Wave (${vendeurWaveNumber || "non renseigné"}) et ${deliveryFee.toLocaleString("fr-FR")} F au livreur pour la livraison.`;
+
+  await sendClientInAppMessage({
+    mission,
+    text: messageText,
+    type: "payment_request",
+    extraData: {
+      paymentUrl,
+      vendeurWaveNumber,
+      amount: articleAmount,
+      articleAmount,
+      deliveryFee,
+    },
+  });
+}
+
+const createCustomIcon = (iconUrl, size = [38, 38], tintColor = null) => {
   return L.divIcon({
-    html: `<div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;transform:rotate(${rotation}deg);transition:transform 0.2s ease-out;">
-             <img src="${iconUrl}" style="width:100%;height:100%;object-fit:contain;filter:drop-shadow(0px 4px 6px rgba(0,0,0,0.3));"/>
-           </div>`,
-    iconSize: [40, 40],
-    iconAnchor: [20, 20],
-    className: "",
+    className: "custom-map-marker",
+    html: `<div style="position:relative; width:${size[0]}px; height:${size[1]}px; display:flex; align-items:center; justify-content:center;">
+      <img src="${iconUrl}" style="width:100%; height:100%; object-fit:contain; border-radius:50%; box-shadow:0 4px 12px rgba(0,0,0,0.3); border: 2px solid ${tintColor || "#ffffff"}; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.2));" />
+    </div>`,
+    iconSize: size,
+    iconAnchor: [size[0] / 2, size[1] / 2],
+    popupAnchor: [0, -size[1] / 2],
   });
 };
 
-function MapController3D({ myPos, mission, setRoute, setDistance, setDuration, panelHeight, vehicleRotation }) {
-  const map = useMap();
-  const lastFetchTime = useRef(0);
+const icons = {
+  client: createCustomIcon(clientMarkerImg, [34, 34], "#3b82f6"),
+  destination: createCustomIcon(clientMarkerImg, [36, 36], "#10b981"),
+  moto: createCustomIcon(livreurMarkerImg, [43, 43], "#10b981"),
+  suv: createCustomIcon(suvMarkerImg, [40, 40], "#0f172a"),
+  taxi: createCustomIcon(taxiMarkerImg, [40, 40], "#0f172a"),
+  eco: createCustomIcon(vtcEcoMarkerImg, [40, 40], "#0f172a"),
+  confort: createCustomIcon(vtcConfortMarkerImg, [40, 40], "#0f172a"),
+};
 
-  const pickupLat = mission?.pickupLocation?.lat;
-  const pickupLng = mission?.pickupLocation?.lng;
-  const dropoffLat = mission?.dropoffLocation?.lat;
-  const dropoffLng = mission?.dropoffLocation?.lng;
-  const missionStatus = mission?.status;
+const DEFAULT_ABIDJAN_CENTER = [5.36, -4.0083];
+const ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
+const OFFER_TIMEOUT_MS = 55 * 1000;
+
+const PASS_FREE_PRICES = {
+  abidjan: { h12: 2000, h24: 5000 },
+  externe: { h12: 500, h24: 1000 },
+};
+
+function MapFitBounds({ points, panelHeight }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map) return;
+    const t = setTimeout(() => map.invalidateSize({ animate: false }), 200);
+    return () => clearTimeout(t);
+  }, [map, panelHeight]);
 
   useEffect(() => {
-    if (!myPos || !map || !map.getContainer()) return;
+    if (!map || !points?.length) return;
+    const valid = points.filter(
+      (p) => Array.isArray(p) && p.length >= 2 && !isNaN(p[0]) && !isNaN(p[1])
+    );
+    if (valid.length === 0) return;
 
-    if (!pickupLat || !pickupLng) {
-      map.setView([myPos[0], myPos[1]], 16, { animate: true });
+    const h = typeof window !== "undefined" ? window.innerHeight : 700;
+    const panelRatio = Math.min(0.75, Math.max(0.25, (panelHeight || 36) / 100));
+    const bottomPad = Math.max(260, Math.round(h * panelRatio) + 24);
+    const sidePad = 36;
+    const topPad = 120;
+
+    if (valid.length === 1) {
+      const latOffset = (bottomPad / h) * 0.012;
+      map.setView([valid[0][0] - latOffset, valid[0][1]], 15, { animate: true });
       return;
     }
 
-    const fetchRoute = async () => {
-      const now = Date.now();
-      if (now - lastFetchTime.current < 8000) return;
-
-      const start = `${myPos[1]},${myPos[0]}`;
-      const end = missionStatus === "in_transit" && dropoffLat
-        ? `${dropoffLng},${dropoffLat}`
-        : `${pickupLng},${pickupLat}`;
-
-      if (start === end) return;
-
-      try {
-        lastFetchTime.current = now;
-        const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${start};${end}?overview=full&geometries=geojson`);
-
-        if (!r.ok) return;
-
-        const d = await r.json();
-        if (!map || !map.getContainer()) return;
-
-        if (d.routes?.[0]) {
-          const coords = d.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-          setRoute(coords);
-          setDistance((d.routes[0].distance / 1000).toFixed(1));
-          setDuration(Math.ceil(d.routes[0].duration / 60));
-
-          const bp = (window.innerHeight * panelHeight) / 100;
-          map.fitBounds(L.latLngBounds([myPos, coords[coords.length - 1]]), {
-            paddingBottomRight: [20, bp + 80],
-            paddingTopLeft: [80, 120],
-            animate: true
-          });
-        }
-      } catch (e) {
-        console.error("Erreur OSRM:", e);
-      }
-    };
-
-    fetchRoute();
-  }, [myPos, map, panelHeight, pickupLat, pickupLng, dropoffLat, dropoffLng, missionStatus, setRoute, setDistance, setDuration]);
+    map.fitBounds(L.latLngBounds(valid), {
+      paddingTopLeft: [sidePad, topPad],
+      paddingBottomRight: [sidePad, bottomPad],
+      maxZoom: 15,
+      animate: true,
+    });
+  }, [map, points, panelHeight]);
 
   return null;
 }
 
-export default function LivreurExterne({ onNavigateToUpload }) {
+function createDropoffIcon(timeLabel) {
+  const badge = timeLabel
+    ? `<div style="margin-top:4px;background:#0f172a;color:#fff;font-size:10px;font-weight:800;font-family:system-ui,sans-serif;padding:3px 8px;border-radius:10px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.25);">${timeLabel}</div>`
+    : "";
+  return L.divIcon({
+    html: `<div style="display:flex;flex-direction:column;align-items:center;width:64px;pointer-events:none;">
+      <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(145deg,#22c55e,#16a34a);border:3px solid #fff;box-shadow:0 4px 14px rgba(22,163,74,0.45);display:flex;align-items:center;justify-content:center;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M5 21V3" stroke="white" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M5 4h12l-3 4 3 4H5" fill="white"/>
+        </svg>
+      </div>
+      <div style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:10px solid #16a34a;margin-top:-2px;"></div>
+      ${badge}
+    </div>`,
+    iconSize: [64, 78],
+    iconAnchor: [32, 58],
+    className: "",
+  });
+}
+
+function createPickupIcon() {
+  return L.divIcon({
+    html: `<div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(145deg,#3b82f6,#1d4ed8);border:3px solid #fff;box-shadow:0 3px 10px rgba(37,99,235,0.4);"></div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+    className: "",
+  });
+}
+
+const STATUS_FR = {
+  pending: "En attente",
+  offering: "Proposition",
+  accepted: "En route vers le point de ramassage",
+  arrived_at_pickup: "Arrivé au ramassage",
+  ready_for_pickup: "Prêt pour enlèvement",
+  in_transit: "En cours de livraison client",
+  arrived_at_client: "Arrivé chez le client",
+  completed: "Terminée",
+  cancelled: "Annulée",
+  rejected: "Refusée",
+};
+
+export default function LivreurHome() {
   const [courses, setCourses] = useState([]);
   const [livreurVehicle, setLivreurVehicle] = useState("moto");
-  const [livreurName, setLivreurName] = useState("Chauffeur");
-  const [driverZoneName, setDriverZoneName] = useState("Zone Externe");
+  const [livreurName, setLivreurName] = useState("Livreur");
+  const [driverZoneName, setDriverZoneName] = useState("Zone");
   const [isOnline, setIsOnline] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState(true);
 
   const [mission, setMission] = useState(null);
+  const [articlePaymentValidated, setArticlePaymentValidated] = useState(false);
+  const orderPaymentUnsubRef = useRef(null);
   const [myPos, setMyPos] = useState(DEFAULT_ABIDJAN_CENTER);
   const [userData, setUserData] = useState(null);
-  const [routeCoords, setRouteCoords] = useState([]);
-  const [vehicleRotation, setVehicleRotation] = useState(0);
+
+  const [routeSegments, setRouteSegments] = useState([]);
   const [distanceKm, setDistanceKm] = useState(0);
   const [durationMin, setDurationMin] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -157,669 +346,971 @@ export default function LivreurExterne({ onNavigateToUpload }) {
   const [isDragging, setIsDragging] = useState(false);
   const [startY, setStartY] = useState(0);
   const [startHeight, setStartHeight] = useState(36);
+
   const [showPassModal, setShowPassModal] = useState(false);
+  const [showBadgeModal, setShowBadgeModal] = useState(false);
   const [internalAlert, setInternalAlert] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [showBadgeModal, setShowBadgeModal] = useState(false);
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [pickupCodeInput, setPickupCodeInput] = useState("");
-  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+  const [isNotifyingArrival, setIsNotifyingArrival] = useState(false);
+  const [offerCountdown, setOfferCountdown] = useState(null);
 
   const audioRef = useRef(new Audio(ALERT_SOUND_URL));
   const lastUpdateRef = useRef(0);
+  const prevMissionIdRef = useRef(null);
+  const offerTimerRef = useRef(null);
 
   const showAlert = useCallback((message, type = "error") => {
     setInternalAlert({ message, type });
     setTimeout(() => setInternalAlert(null), 4000);
   }, []);
 
-  const isExterne = userData?.role === "livreur-externe";
-
-  useWaveScan({
-    userData: userData ? { id: auth.currentUser?.uid, ...userData } : null,
-    mode: "pass",
-    allowedAmounts: isExterne ? [1000, 2000] : [5000, 10000],
-    onSuccess: (res) => {
-      showAlert(`✅ Mode FREE ${res.hours >= 24 ? "24H" : "12H"} activé !`, "success");
-      setShowPassModal(false);
-    },
-  });
-
   useEffect(() => {
-    const t = setInterval(() => setCurrentTime(new Date()), 10000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
-  const isFreeModeActive = () => {
-    if (!userData?.passExpireAt) return false;
-    const expire = userData.passExpireAt.toDate ? userData.passExpireAt.toDate() : new Date(userData.passExpireAt);
-    return expire > currentTime;
-  };
-
   useEffect(() => {
-    if (mission?.status === "offering" || courses.length > 0) {
-      if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
-      audioRef.current.loop = true;
-      audioRef.current.play().catch(() => {});
-    } else {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
-  }, [mission?.status, courses.length]);
+    const user = auth?.currentUser;
+    if (!user) return;
 
-  useEffect(() => {
-    if (!auth.currentUser) return;
-    let isMounted = true;
-
-    const userDocRef = doc(db, "users", auth.currentUser.uid);
-    const unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
-      if (!isMounted) return;
+    const unsubUser = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
       if (docSnap.exists()) {
-        const uData = docSnap.data();
-        setUserData(uData);
-
-        if (uData.prenom) setLivreurName(uData.prenom);
-        else if (uData.nom) setLivreurName(uData.nom);
-
-        const zoneName = uData.sectorZone
-          ? uData.sectorZone.charAt(0).toUpperCase() + uData.sectorZone.slice(1)
-          : "Zone Externe";
-        setDriverZoneName(zoneName);
-
-        const cleanedVehicleType = uData.typeVehicule
-          ? uData.typeVehicule.toLowerCase().trim()
-          : "moto";
-        setLivreurVehicle(cleanedVehicleType);
-        setIsOnline(uData.status === "online" || uData.isOnline === true);
-
-        if (uData.lat && uData.lng) {
-          setMyPos([uData.lat, uData.lng]);
+        const data = docSnap.data();
+        setUserData(data);
+        setIsOnline(!!data.isOnline);
+        const vType = (data.typeVehicule || data.vehicleType || "moto")
+          .toString()
+          .toLowerCase()
+          .trim();
+        setLivreurVehicle(vType);
+        if (data.fullName || data.nom || data.nomComplet) {
+          setLivreurName(data.fullName || data.nomComplet || data.nom);
+        }
+        if (data.zone || data.sectorZone) {
+          setDriverZoneName(data.zone || data.sectorZone);
         }
       }
       setLoadingStatus(false);
     });
 
-    const wid = navigator.geolocation.watchPosition(
-      async (position) => {
-        if (!isMounted) return;
-        const { latitude: lat, longitude: lng, heading } = position.coords;
-        setMyPos([lat, lng]);
-        if (heading !== null && heading !== undefined) setVehicleRotation(heading);
-
-        const now = Date.now();
-        if (now - lastUpdateRef.current >= 10000) {
-          lastUpdateRef.current = now;
-          const currentUserId = auth.currentUser?.uid || userData?.id;
-          if (currentUserId) {
-            try {
-              await setDoc(
-                doc(db, "users", currentUserId),
-                { lat, lng, lastGpsUpdate: serverTimestamp() },
-                { merge: true }
-              );
-            } catch (error) {
-              console.error("Erreur mise à jour GPS :", error);
-            }
-          }
-        }
-      },
-      (error) => console.error("Erreur Geolocation :", error),
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 8000 }
-    );
-
-    return () => {
-      isMounted = false;
-      unsubscribeUser();
-      navigator.geolocation.clearWatch(wid);
-    };
-  }, [userData?.id]);
-
-  useEffect(() => {
-    if (!userData) return;
-    let isMounted = true;
-    const activeZone = userData.sectorZone || "default";
-
-    const q = query(
-      collection(db, "courses"),
-      where("status", "==", "pending"),
-      where("zone", "==", activeZone),
-      orderBy("createdAt", "desc")
-    );
-
-    const unsubCourses = onSnapshot(q, (snap) => {
-      if (!isMounted) return;
-      setCourses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (err) => console.error("Erreur flux courses:", err));
-
-    return () => {
-      isMounted = false;
-      unsubCourses();
-    };
-  }, [userData]);
-
-  useEffect(() => {
-    if (!auth.currentUser) return;
-    let isMounted = true;
-
-    const q = query(
-      collection(db, "courses"),
-      where("assignedLivreurId", "==", auth.currentUser.uid),
-      where("status", "in", ["offering", "assigned", "accepted", "arrived_at_pickup", "in_transit"])
-    );
-
-    const unsubMission = onSnapshot(q, (s) => {
-      if (!isMounted) return;
-      if (!s.empty) {
-        setMission({ id: s.docs[0].id, ...s.docs[0].data() });
-      } else {
-        setMission(null);
-        setRouteCoords([]);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      unsubMission();
-    };
+    return () => unsubUser();
   }, []);
 
-  const toggleOnlineStatus = async () => {
-    const currentUserId = auth.currentUser?.uid || userData?.id;
-    if (!currentUserId) return;
+  useEffect(() => {
+    if (!navigator.geolocation) return;
 
-    const newStatus = !isOnline;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const newPos = [latitude, longitude];
+        setMyPos(newPos);
+        lastUpdateRef.current = Date.now();
 
-    try {
-      await setDoc(
-        doc(db, "users", currentUserId),
-        {
-          isOnline: newStatus,
-          isAvailable: newStatus,
-          status: newStatus ? "online" : "offline",
-          updatedAt: serverTimestamp()
-        },
-        { merge: true }
-      );
-      setIsOnline(newStatus);
-    } catch (error) {
-      console.error("Erreur changement de statut :", error);
+        if (auth?.currentUser && isOnline) {
+          const userRef = doc(db, "users", auth.currentUser.uid);
+          setDoc(
+            userRef,
+            {
+              location: { lat: latitude, lng: longitude },
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        }
+      },
+      (err) => {
+        console.warn("Avertissement GPS:", err.message);
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [isOnline]);
+
+  useEffect(() => {
+    if (offerTimerRef.current) {
+      clearTimeout(offerTimerRef.current);
+      offerTimerRef.current = null;
     }
-  };
 
-  const handleValidatePickupCode = async () => {
-    if (!mission) return;
-    if (!pickupCodeInput || pickupCodeInput.trim().length !== 6) {
-      showAlert("Veuillez saisir un code valide à 6 chiffres", "error");
+    if (!mission || !auth?.currentUser) {
+      setOfferCountdown(null);
+      return;
+    }
+    if (mission.status !== "pending" && mission.status !== "offering") {
+      setOfferCountdown(null);
       return;
     }
 
-    setIsVerifyingCode(true);
-    try {
-      const validateHandoff = httpsCallable(functions, "validateCoursierToLivreurHandoff");
-      await validateHandoff({ courseId: mission.id, enteredCode: pickupCodeInput.trim() });
+    const courseId = mission.id;
+    const uid = auth.currentUser.uid;
+    const totalSec = Math.round(OFFER_TIMEOUT_MS / 1000);
+    setOfferCountdown(totalSec);
+    const startedAt = Date.now();
 
-      showAlert("Code validé ! Passation enregistrée.", "success");
-      setPickupCodeInput("");
-    } catch (error) {
-      console.error("Erreur de passation:", error);
-      showAlert(error.message || "Code invalide ou paiement non confirmé", "error");
-    } finally {
-      setIsVerifyingCode(false);
+    const tickId = setInterval(() => {
+      const left = Math.max(
+        0,
+        totalSec - Math.floor((Date.now() - startedAt) / 1000)
+      );
+      setOfferCountdown(left);
+    }, 250);
+
+    offerTimerRef.current = setTimeout(async () => {
+      try {
+        const courseRef = doc(db, "courses", courseId);
+        const cycle = Number(mission?.offerCycle || 0) + 1;
+        await updateDoc(courseRef, {
+          status: "pending",
+          driverId: null,
+          assignedLivreurId: null,
+          livreurId: null,
+          lastOfferTimedOutAt: serverTimestamp(),
+          lastOfferTimedOutBy: uid,
+          offerCycle: cycle,
+          updatedAt: serverTimestamp(),
+        });
+        setMission(null);
+        setOfferCountdown(null);
+        showAlert(
+          "55 s écoulées — la course a été remise dans le circuit pour un autre livreur éligible.",
+          "info"
+        );
+      } catch (err) {
+        console.warn("Timeout offre 55s:", err?.message || err);
+      }
+    }, OFFER_TIMEOUT_MS);
+
+    return () => {
+      clearInterval(tickId);
+      if (offerTimerRef.current) {
+        clearTimeout(offerTimerRef.current);
+        offerTimerRef.current = null;
+      }
+    };
+  }, [mission, showAlert]);
+
+  const isVehicleCompatible = useCallback((course, livreurType) => {
+    const lt = (livreurType || "moto").toLowerCase().trim();
+    const vt = (course?.vehicleType || "").toLowerCase();
+    const vid = `${course?.vehicleId || ""} ${course?.courseMode || ""} ${course?.mode || ""}`.toLowerCase();
+    const blob = `${vt} ${vid}`;
+
+    const isMoto =
+      blob.includes("moto") ||
+      blob.includes("chap") ||
+      blob.includes("nostress") ||
+      blob.includes("no stress") ||
+      blob.includes("saloni");
+
+    const isHustle =
+      blob.includes("taxi") ||
+      blob.includes("hustle") ||
+      blob.includes("pieton") ||
+      blob.includes("piéton") ||
+      blob.includes("bicycle") ||
+      blob.includes("bicyclette") ||
+      blob.includes("transporteur") ||
+      blob.includes("arrangement");
+
+    const isCargo =
+      blob.includes("vtc") ||
+      blob.includes("cargo") ||
+      blob.includes("suv") ||
+      blob.includes("camion") ||
+      blob.includes("express") ||
+      blob.includes("confort") ||
+      blob.includes("standard") ||
+      blob.includes("eco") ||
+      (blob.includes("voiture") && !isMoto);
+
+    const isAntara = blob.includes("antara");
+
+    if (lt.includes("moto") || lt === "bike" || lt === "bicycle") {
+      return isMoto && !isHustle && !isCargo;
+    }
+    if (
+      lt.includes("taxi") ||
+      lt.includes("hustle") ||
+      lt.includes("pieton") ||
+      lt.includes("piéton") ||
+      lt.includes("bicycle")
+    ) {
+      return isHustle;
+    }
+    if (
+      lt.includes("vtc") ||
+      lt.includes("cargo") ||
+      lt.includes("suv") ||
+      lt.includes("eco") ||
+      lt.includes("confort") ||
+      lt.includes("voiture") ||
+      lt.includes("camion")
+    ) {
+      return isCargo;
+    }
+    if (lt.includes("saloni")) return isMoto || blob.includes("saloni");
+    if (lt.includes("antara")) return isAntara;
+
+    return vt === lt || vid.includes(lt);
+  }, []);
+
+  useEffect(() => {
+    if (!mission) {
+      setRouteSegments([]);
+      return;
+    }
+
+    let cancelled = false;
+    const hasPickup =
+      mission.pickupLocation?.lat != null && mission.pickupLocation?.lng != null;
+    const hasDropoff =
+      mission.dropoffLocation?.lat != null &&
+      mission.dropoffLocation?.lng != null;
+
+    async function fetchLeg(start, end) {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.routes?.[0]) {
+          const coords = data.routes[0].geometry.coordinates.map((c) => [
+            c[1],
+            c[0],
+          ]);
+          return {
+            positions: coords,
+            distance: data.routes[0].distance / 1000,
+            duration: data.routes[0].duration / 60,
+          };
+        }
+      } catch (_) {}
+      return {
+        positions: [start, end],
+        distance: null,
+        duration: null,
+      };
+    }
+
+    (async () => {
+      const segments = [];
+      let totalKm = 0;
+      let totalMin = 0;
+
+      if (
+        myPos &&
+        hasPickup &&
+        [
+          "pending",
+          "offering",
+          "accepted",
+          "arrived_at_pickup",
+          "ready_for_pickup",
+        ].includes(mission.status)
+      ) {
+        const leg = await fetchLeg(myPos, [
+          Number(mission.pickupLocation.lat),
+          Number(mission.pickupLocation.lng),
+        ]);
+        segments.push({
+          positions: leg.positions,
+          color: "#6366f1",
+          dashArray: "10, 10",
+        });
+        if (leg.distance) totalKm += leg.distance;
+        if (leg.duration) totalMin += leg.duration;
+      }
+
+      if (hasPickup && hasDropoff) {
+        const leg = await fetchLeg(
+          [
+            Number(mission.pickupLocation.lat),
+            Number(mission.pickupLocation.lng),
+          ],
+          [
+            Number(mission.dropoffLocation.lat),
+            Number(mission.dropoffLocation.lng),
+          ]
+        );
+        segments.push({
+          positions: leg.positions,
+          color: "#10b981",
+          dashArray: null,
+        });
+        if (leg.distance) totalKm += leg.distance;
+        if (leg.duration) totalMin += leg.duration;
+      }
+
+      if (myPos && hasDropoff && (mission.status === "in_transit" || mission.status === "arrived_at_client")) {
+        const leg = await fetchLeg(myPos, [
+          Number(mission.dropoffLocation.lat),
+          Number(mission.dropoffLocation.lng),
+        ]);
+        segments.length = 0;
+        segments.push({
+          positions: leg.positions,
+          color: "#10b981",
+          dashArray: null,
+        });
+        totalKm = leg.distance || 0;
+        totalMin = leg.duration || 0;
+      }
+
+      if (cancelled) return;
+      setRouteSegments(segments);
+      setDistanceKm(
+        totalKm > 0 ? Number(totalKm.toFixed(1)) : Number(mission.distance || 0)
+      );
+      setDurationMin(
+        totalMin > 0 ? Math.ceil(totalMin) : Number(mission.duration || 0)
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mission, myPos]);
+
+  useEffect(() => {
+    const linkedOrderId = mission?.orderId || mission?.linkedOrderId;
+    if (!mission || mission.status !== "arrived_at_client" || !linkedOrderId) {
+      setArticlePaymentValidated(false);
+      return;
+    }
+
+    let cancelled = false;
+    setArticlePaymentValidated(false);
+
+    (async () => {
+      let orderDocRef = null;
+      try {
+        const direct = await getDoc(doc(db, "orders", linkedOrderId));
+        if (direct.exists()) {
+          orderDocRef = direct.ref;
+        } else {
+          const matchSnap = await getDocs(
+            query(collection(db, "orders"), where("orderId", "==", linkedOrderId), limit(1))
+          );
+          if (!matchSnap.empty) orderDocRef = matchSnap.docs[0].ref;
+        }
+      } catch (e) {
+        console.warn("Résolution commande pour validation paiement :", e);
+      }
+      if (cancelled || !orderDocRef) return;
+
+      const unsub = onSnapshot(orderDocRef, (snap) => {
+        if (!snap.exists()) return;
+        const od = snap.data();
+        const validated =
+          !!od.paymentValidatedAt ||
+          od.status === "paye_ia_valide" ||
+          od.articlePaymentValidated === true;
+        setArticlePaymentValidated(validated);
+      });
+      orderPaymentUnsubRef.current = unsub;
+    })();
+
+    return () => {
+      cancelled = true;
+      if (orderPaymentUnsubRef.current) {
+        orderPaymentUnsubRef.current();
+        orderPaymentUnsubRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mission?.id, mission?.status, mission?.orderId, mission?.linkedOrderId]);
+
+  useEffect(() => {
+    const user = auth?.currentUser;
+    if (!user || !isOnline) {
+      setCourses([]);
+      setMission(null);
+      prevMissionIdRef.current = null;
+      return;
+    }
+
+    const q = query(
+      collection(db, "courses"),
+      or(
+        where("driverId", "==", user.uid),
+        where("assignedLivreurId", "==", user.uid),
+        where("livreurId", "==", user.uid),
+        where("status", "in", ["pending", "offering"])
+      )
+    );
+
+    const unsubCourses = onSnapshot(
+      q,
+      (snapshot) => {
+        let docsList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+        docsList = docsList.filter((c) => {
+          const isMine =
+            c.driverId === user.uid ||
+            c.assignedLivreurId === user.uid ||
+            c.livreurId === user.uid;
+          if (isMine) return true;
+
+          if (c.status !== "pending" && c.status !== "offering") return false;
+          if (!isVehicleCompatible(c, livreurVehicle)) return false;
+
+          if (c.lastOfferTimedOutBy === user.uid && c.lastOfferTimedOutAt) {
+            const ts = c.lastOfferTimedOutAt.toDate
+              ? c.lastOfferTimedOutAt.toDate().getTime()
+              : (c.lastOfferTimedOutAt.seconds || 0) * 1000;
+            if (Date.now() - ts < OFFER_TIMEOUT_MS) return false;
+          }
+          return true;
+        });
+
+        docsList.sort((a, b) => {
+          const timeA = a.createdAt?.toDate
+            ? a.createdAt.toDate().getTime()
+            : a.createdAt || 0;
+          const timeB = b.createdAt?.toDate
+            ? b.createdAt.toDate().getTime()
+            : b.createdAt || 0;
+          return timeB - timeA;
+        });
+
+        setCourses(docsList);
+
+        const activeMission = docsList.find((c) =>
+          [
+            "pending",
+            "offering",
+            "accepted",
+            "arrived_at_pickup",
+            "in_transit",
+            "arrived_at_client",
+            "ready_for_pickup",
+          ].includes(c.status)
+        );
+
+        if (activeMission && prevMissionIdRef.current !== activeMission.id) {
+          audioRef.current.play().catch(() => {});
+        }
+
+        prevMissionIdRef.current = activeMission ? activeMission.id : null;
+        setMission(activeMission || null);
+      },
+      (error) => {
+        console.error("Erreur récupération courses:", error);
+      }
+    );
+
+    return () => unsubCourses();
+  }, [isOnline, livreurVehicle, isVehicleCompatible]);
+
+  const isFreeModeActive = useCallback(() => {
+    return (
+      userData?.passFreeUntil &&
+      userData.passFreeUntil.toDate() > new Date()
+    );
+  }, [userData]);
+
+  const isExterneZone = useCallback(() => {
+    const role = (userData?.role || "").toLowerCase();
+    const zone = (
+      userData?.zone ||
+      userData?.sectorZone ||
+      "abidjan"
+    ).toLowerCase();
+    if (role.includes("externe") || role.includes("livreur-")) return true;
+    if (zone && zone !== "abidjan") return true;
+    return false;
+  }, [userData]);
+
+  const passPrices = isExterneZone()
+    ? PASS_FREE_PRICES.externe
+    : PASS_FREE_PRICES.abidjan;
+
+  const getDriverIcon = () => {
+    switch (livreurVehicle) {
+      case "suv":
+      case "camion":
+        return icons.suv;
+      case "taxi":
+      case "hustle":
+      case "pieton":
+      case "piéton":
+      case "bicyclette":
+        return icons.taxi;
+      case "eco":
+      case "vtc":
+      case "cargo":
+        return icons.eco;
+      case "confort":
+        return icons.confort;
+      case "moto":
+      default:
+        return icons.moto;
     }
   };
 
-  const updateMissionStatus = async (nextStatus) => {
-    if (!mission) return;
-    setIsProcessing(true);
+  const toggleOnlineStatus = async () => {
+    if (!auth?.currentUser) {
+      showAlert("Session expirée, reconnecte-toi.");
+      return;
+    }
     try {
-      await updateDoc(doc(db, "courses", mission.id), {
-        status: nextStatus,
-        updatedAt: serverTimestamp()
+      setLoadingStatus(true);
+      const newStatus = !isOnline;
+      await updateDoc(doc(db, "users", auth.currentUser.uid), {
+        isOnline: newStatus,
+        updatedAt: serverTimestamp(),
       });
-      showAlert(`Statut mis à jour : ${nextStatus.replace(/_/g, ' ')}`, "success");
-    } catch (err) {
-      console.error("Erreur statut:", err);
-      showAlert("Erreur lors de la mise à jour de la mission", "error");
+      setIsOnline(newStatus);
+      showAlert(`Statut : ${newStatus ? "En ligne" : "Hors ligne"}`, "success");
+    } catch (e) {
+      console.error(e);
+      showAlert("Erreur lors du changement de statut");
     } finally {
-      setIsProcessing(false);
+      setLoadingStatus(false);
     }
   };
 
   const handleDragStart = (e) => {
+    e.preventDefault();
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     setIsDragging(true);
-    setStartY(e.type === "touchstart" ? e.touches[0].clientY : e.clientY);
+    setStartY(clientY);
     setStartHeight(panelHeight);
   };
 
-  const handleDragMove = useCallback((e) => {
+  useEffect(() => {
     if (!isDragging) return;
-    const y = e.type === "touchmove" ? e.touches[0].clientY : e.clientY;
-    setPanelHeight(Math.max(30, Math.min(70, startHeight + ((startY - y) / window.innerHeight) * 100)));
-  }, [isDragging, startHeight, startY]);
 
-  const acceptCourse = async (courseId, paymentMethod = "solde") => {
-    if (!auth.currentUser || !isOnline) {
-      showAlert("Vous devez être EN LIGNE pour accepter une course", "error");
-      return;
-    }
+    const onMove = (e) => {
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      if (clientY == null) return;
+      const deltaY = startY - clientY;
+      let newHeight = startHeight + (deltaY / window.innerHeight) * 100;
+      newHeight = Math.min(60, Math.max(18, newHeight));
+      setPanelHeight(newHeight);
+    };
+    const onEnd = () => {
+      setIsDragging(false);
+      setPanelHeight((h) => {
+        if (h < 28) return 22;
+        if (h < 45) return 36;
+        return 55;
+      });
+    };
 
+    window.addEventListener("mousemove", onMove, { passive: false });
+    window.addEventListener("mouseup", onEnd);
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onEnd);
+
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onEnd);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onEnd);
+    };
+  }, [isDragging, startY, startHeight]);
+
+  const price = Number(
+    mission?.proposedPrice ?? mission?.price ?? mission?.finalPrice ?? 0
+  );
+  const basePrice = Number(mission?.basePrice ?? mission?.price ?? 0);
+  const isNegoMission = !!(
+    mission?.isNegoActive ||
+    mission?.isArrangement ||
+    mission?.courseMode?.toLowerCase?.().includes("transporteur")
+  );
+
+  const commissionRateSolde = 0.13;
+  const commissionRateJeton = 0.17;
+  const costSolde13 = Math.round(price * commissionRateSolde);
+  const discountJetons17 = Math.round(price * commissionRateJeton);
+
+  const needsCommission =
+    mission?.needCommission === true ||
+    (!!mission?.orderId && mission?.needCommission !== false);
+  const commissionPaid =
+    !!mission?.commissionPaid || mission?.status === "ready_for_pickup";
+
+  const otherPendingCourses = courses.filter(
+    (c) =>
+      c.id !== mission?.id &&
+      (c.status === "pending" || c.status === "offering")
+  );
+
+  const acceptCourseWithMode = async (courseId, mode) => {
+    if (!auth?.currentUser || isProcessing) return;
     setIsProcessing(true);
-    const userRef = doc(db, "users", auth.currentUser.uid);
-    const courseRef = doc(db, "courses", courseId);
-
     try {
+      const courseRef = doc(db, "courses", courseId);
+      const userRef = doc(db, "users", auth.currentUser.uid);
+
+      let orderIdToSync = null;
+
       await runTransaction(db, async (transaction) => {
-        const courseDoc = await transaction.get(courseRef);
-        if (!courseDoc.exists()) throw new Error("Cette course n'existe plus.");
+        const courseSnap = await transaction.get(courseRef);
+        if (!courseSnap.exists()) throw new Error("Course introuvable");
+        const c = courseSnap.data();
+        if (c.status !== "pending" && c.status !== "offering") {
+          throw new Error("Course déjà prise");
+        }
 
-        const courseData = courseDoc.data();
-        const price = Number(courseData.price || 0);
+        orderIdToSync = c.orderId || c.linkedOrderId || null;
 
-        let payload = {
-          status: "accepted",
-          assignedLivreurId: auth.currentUser.uid,
-          assignedLivreurName: livreurName,
-          livreurId: auth.currentUser.uid,
-          driverId: auth.currentUser.uid,
-          acceptedAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        };
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) throw new Error("Profil introuvable");
+        const u = userSnap.data();
 
-        const userUpdates = { isAvailable: false, currentCourseId: courseId };
+        const p = Number(c.proposedPrice ?? c.price ?? 0);
+        const free =
+          u.passFreeUntil &&
+          u.passFreeUntil.toDate &&
+          u.passFreeUntil.toDate() > new Date();
 
-        if (isFreeModeActive()) {
-          payload.commission = 0;
-          payload.paymentMethod = "pass_free";
-        } else {
-          let commission = 0;
-          if (paymentMethod === "solde") {
-            commission = Math.round(price * 0.13);
-            const currentSolde = Number(userData?.solde || 0);
-            if (currentSolde < commission) throw new Error("Solde insuffisant pour la commission (13%)");
-            userUpdates.solde = increment(-commission);
-            payload.commission = commission;
-            payload.paymentMethod = "solde";
-            payload.commissionRateUsed = 0.13;
-          } else {
-            commission = Math.round(price * 0.17);
-            const currentJetons = Number(userData?.jetons || 0);
-            if (currentJetons < commission) throw new Error("Jetons insuffisants pour la commission (17%)");
-            userUpdates.jetons = increment(-commission);
-            payload.commission = commission;
-            payload.paymentMethod = "jetons";
-            payload.commissionRateUsed = 0.17;
+        if (!free) {
+          if (mode === "solde") {
+            const cost = Math.round(p * commissionRateSolde);
+            if ((u.solde || 0) < cost) throw new Error("Solde insuffisant");
+            transaction.update(userRef, {
+              solde: increment(-cost),
+              updatedAt: serverTimestamp(),
+            });
+          } else if (mode === "jeton") {
+            const cost = Math.round(p * commissionRateJeton);
+            if ((u.jetons || 0) < cost) throw new Error("Jetons insuffisants");
+            transaction.update(userRef, {
+              jetons: increment(-cost),
+              updatedAt: serverTimestamp(),
+            });
           }
         }
 
-        transaction.update(userRef, userUpdates);
-        transaction.update(courseRef, payload);
+        transaction.update(courseRef, {
+          status: "accepted",
+          driverId: auth.currentUser.uid,
+          assignedLivreurId: auth.currentUser.uid,
+          livreurId: auth.currentUser.uid,
+          acceptedAt: serverTimestamp(),
+          paymentMode: free ? "pass_free" : mode,
+          updatedAt: serverTimestamp(),
+        });
+
+        if (orderIdToSync) {
+          const orderRef = doc(db, "orders", orderIdToSync);
+          transaction.update(orderRef, {
+            status: "accepte",
+            driverId: auth.currentUser.uid,
+            coursierId: auth.currentUser.uid,
+            updatedAt: serverTimestamp(),
+          });
+        }
       });
 
-      showAlert("Course acceptée avec succès !", "success");
+      await sendClientInAppMessage({
+        mission: { ...(mission || {}), id: courseId, orderId: orderIdToSync || mission?.orderId, linkedOrderId: orderIdToSync || mission?.linkedOrderId },
+        text: "Un livreur a pris en charge votre commande et se dirige vers le point de ramassage.",
+      });
 
-      try {
-        const initCodes = httpsCallable(functions, "initializeVerificationCodes");
-        await initCodes({ courseId });
-      } catch (codeErr) {
-        console.error("Erreur génération des codes de validation:", codeErr);
-      }
-    } catch (error) {
-      console.error(error);
-      showAlert(error.message || "Impossible d'accepter cette course");
+      showAlert("Livraison acceptée !", "success");
+    } catch (err) {
+      console.error(err);
+      showAlert(err.message || "Impossible d'accepter");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleReject = async () => {
-    if (!mission) return;
+  const handleReject = async (courseId) => {
+    if (!auth?.currentUser || isProcessing) return;
     setIsProcessing(true);
     try {
-      await updateDoc(doc(db, "courses", mission.id), {
+      await updateDoc(doc(db, "courses", courseId), {
         status: "pending",
+        driverId: null,
         assignedLivreurId: null,
-        updatedAt: serverTimestamp()
+        livreurId: null,
+        lastOfferTimedOutBy: auth.currentUser.uid,
+        lastOfferTimedOutAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
-      showAlert("Mission refusée", "success");
       setMission(null);
-    } catch (e) {
-      showAlert("Erreur lors du refus de la mission");
+      showAlert("Livraison refusée et remise dans le circuit", "info");
+    } catch (err) {
+      showAlert("Erreur refus");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleGoToUpload = () => {
-    setShowPassModal(false);
-    if (typeof onNavigateToUpload === "function") {
-      onNavigateToUpload();
-    } else {
-      window.location.href = "/upload-recu";
+  const updateMissionStatus = async (newStatus, e) => {
+    if (e) e.stopPropagation();
+    if (!mission?.id || isProcessing) return;
+    setIsProcessing(true);
+    try {
+      const targetOrderId = mission.orderId || mission.linkedOrderId || mission.id;
+
+      const payload = {
+        status: newStatus,
+        updatedAt: serverTimestamp(),
+      };
+      if (newStatus === "completed") {
+        payload.completedAt = serverTimestamp();
+      }
+      await updateDoc(doc(db, "courses", mission.id), payload);
+
+      let msgText = "";
+      let mappedOrderStatus = newStatus;
+
+      if (newStatus === "arrived_at_pickup" || newStatus === "ready_for_pickup") {
+        msgText = "Votre livreur est arrivé au point de ramassage. Les articles sont en cours de préparation / vérification.";
+        mappedOrderStatus = "arrived_at_pickup";
+      } else if (newStatus === "in_transit") {
+        msgText = "Votre livreur a récupéré votre colis et est maintenant en route pour la livraison.";
+        mappedOrderStatus = "in_transit";
+      } else if (newStatus === "arrived_at_client") {
+        mappedOrderStatus = "arrived_at_client";
+      } else if (newStatus === "completed") {
+        msgText = "Votre commande a été livrée avec succès ! Merci pour votre confiance.";
+        mappedOrderStatus = "livre";
+      }
+
+      if (targetOrderId) {
+        try {
+          const orderRef = doc(db, "orders", targetOrderId);
+          await updateDoc(orderRef, {
+            status: mappedOrderStatus,
+            updatedAt: serverTimestamp(),
+          });
+        } catch (e) {
+          console.warn("Mise à jour directe orders ignorée si non existant:", e);
+        }
+      }
+
+      if (newStatus === "arrived_at_client") {
+        await notifyVendeurArrivalAtClient(mission);
+        await sendPaymentRequestToClient(mission);
+      } else if (msgText) {
+        await sendClientInAppMessage({ mission, text: msgText });
+      }
+
+      showAlert(
+        newStatus === "completed"
+          ? "Livraison terminée !"
+          : newStatus === "arrived_at_client"
+          ? "Arrivée chez le client notifiée & invitation Wave envoyée !"
+          : "Statut mis à jour",
+        "success"
+      );
+
+      if (newStatus === "completed") setMission(null);
+    } catch (err) {
+      console.error(err);
+      showAlert("Erreur lors de la mise à jour");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  if (navigationMode) return (
-    <div className="relative w-full h-screen">
-      {mission?.isCompteur && <div className="fixed top-12 left-4 z-[300]"><TaxiMeter missionId={mission.id} userRole="livreur" currentDistance={distanceKm}/></div>}
-      <button onClick={() => setNavigationMode(false)} className="fixed top-5 right-4 z-[300] px-6 py-3 bg-slate-900 text-white rounded-2xl text-xs font-black shadow-2xl">← QUITTER NAVIGATION</button>
-      <UltimateDrivingView 
-        vehiclePosition={myPos} 
-        route={routeCoords} 
-        remainingDistance={distanceKm} 
-        estimatedTime={durationMin} 
-        vehicleType={livreurVehicle} 
-        courseMode={mission?.courseMode}
+  const handleNotifyArrivalAndRequestCommission = async () => {
+    if (!mission?.id || isNotifyingArrival) return;
+    setIsNotifyingArrival(true);
+    try {
+      const targetOrderId = mission.orderId || mission.linkedOrderId || mission.id;
+
+      await updateDoc(doc(db, "courses", mission.id), {
+        status: "arrived_at_pickup",
+        commissionRequested: true,
+        commissionRequestedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      if (targetOrderId) {
+        try {
+          await updateDoc(doc(db, "orders", targetOrderId), {
+            status: "arrived_at_pickup",
+            updatedAt: serverTimestamp(),
+          });
+        } catch (_) {}
+      }
+
+      await sendClientInAppMessage({
+        mission,
+        text: "Votre livreur est arrivé au point de ramassage. Les articles sont en cours de préparation / vérification.",
+      });
+
+      showAlert("Arrivée au point de ramassage notifiée", "success");
+    } catch (err) {
+      showAlert("Erreur notification");
+    } finally {
+      setIsNotifyingArrival(false);
+    }
+  };
+
+  if (navigationMode && mission) {
+    const navRoute =
+      routeSegments.length > 0
+        ? routeSegments.flatMap((s) => s.positions || [])
+        : [];
+
+    const destLabel =
+      mission.destination ||
+      mission.dropoffAddress ||
+      mission.pickupAddress ||
+      "la destination";
+
+    return (
+      <UltimateDrivingView
+        vehiclePosition={myPos}
+        route={navRoute}
+        remainingDistance={distanceKm}
+        estimatedTime={durationMin}
+        vehicleType={livreurVehicle}
+        courseMode={mission.courseMode || mission.mode || ""}
+        destinationLabel={destLabel}
+        onClose={() => setNavigationMode(false)}
       />
-    </div>
-  );
+    );
+  }
+
+  const mapPoints = [
+    myPos,
+    mission?.pickupLocation?.lat != null
+      ? [
+          Number(mission.pickupLocation.lat),
+          Number(mission.pickupLocation.lng),
+        ]
+      : null,
+    mission?.dropoffLocation?.lat != null
+      ? [
+          Number(mission.dropoffLocation.lat),
+          Number(mission.dropoffLocation.lng),
+        ]
+      : null,
+  ].filter((p) => Array.isArray(p) && p.length >= 2 && !isNaN(p[0]) && !isNaN(p[1]));
 
   return (
-    <div className="relative flex flex-col w-full h-screen overflow-hidden bg-slate-900"
-      onTouchMove={handleDragMove} onMouseMove={handleDragMove}
-      onMouseUp={() => setIsDragging(false)} onTouchEnd={() => setIsDragging(false)}>
+    <div className="relative w-full h-screen overflow-hidden livreur-home bg-slate-100">
+      <SideMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
 
-      <SideMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} userData={userData} />
-
-      {/* CARTE PLEIN ÉCRAN */}
-      <div className="absolute inset-0 z-0 w-full h-full bg-slate-900">
-        <MapContainer 
-          center={myPos} 
-          zoom={16} 
-          style={{ height: "100%", width: "100%" }} 
-          zoomControl={false} 
-          attributionControl={false}
-          className="w-full h-full filter invert-[0.9] hue-rotate-180 brightness-[0.85] contrast-[1.2]"
+      <div className="absolute inset-0 z-0">
+        <MapContainer
+          center={myPos}
+          zoom={14}
+          zoomControl={false}
+          style={{ height: "100%", width: "100%" }}
         >
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
-          
-          <MapController3D 
-            myPos={myPos} 
-            mission={mission} 
-            setRoute={setRouteCoords} 
-            setDistance={setDistanceKm} 
-            setDuration={setDurationMin} 
-            panelHeight={panelHeight} 
-            vehicleRotation={vehicleRotation} 
+          <TileLayer 
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" 
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
-
-          {myPos && (
-            <Marker position={myPos} icon={getRotatedDriverIcon(livreurVehicle, vehicleRotation)} />
+          <MapFitBounds points={mapPoints} panelHeight={panelHeight} />
+          <Marker position={myPos} icon={getDriverIcon()} zIndexOffset={1000} />
+          {mission?.pickupLocation?.lat != null && (
+            <Marker
+              position={[
+                Number(mission.pickupLocation.lat),
+                Number(mission.pickupLocation.lng),
+              ]}
+              icon={createPickupIcon()}
+              zIndexOffset={800}
+            />
           )}
-
-          {mission?.pickupLocation && (
-            <>
-              {routeCoords.length > 0 && <Polyline positions={routeCoords} color="#10b981" weight={6} opacity={0.9} />}
-              <Marker position={[mission.pickupLocation.lat, mission.pickupLocation.lng]} icon={clientIcon} />
-              {mission.dropoffLocation && <Marker position={[mission.dropoffLocation.lat, mission.dropoffLocation.lng]} icon={destinationIcon} />}
-            </>
+          {mission?.dropoffLocation?.lat != null && (
+            <Marker
+              position={[
+                Number(mission.dropoffLocation.lat),
+                Number(mission.dropoffLocation.lng),
+              ]}
+              icon={createDropoffIcon(
+                durationMin > 0 ? `~${durationMin} min` : "Arrivée"
+              )}
+              zIndexOffset={900}
+            />
           )}
+          {routeSegments.map((seg, i) => (
+            <Polyline
+              key={i}
+              positions={seg.positions}
+              pathOptions={{
+                color: seg.color,
+                weight: 5,
+                dashArray: seg.dashArray || null,
+              }}
+            />
+          ))}
         </MapContainer>
       </div>
 
-      {/* BOUTONS ET INFORMATIONS DE BORD */}
-      <div className="absolute top-3 left-4 right-4 z-[50] flex justify-between items-start pointer-events-none">
-        <div className="flex flex-col gap-2 pointer-events-auto">
-          <button onClick={() => setIsMenuOpen(true)} className="p-3.5 border border-slate-200 shadow-xl bg-white/95 backdrop-blur-md rounded-2xl text-slate-800 active:scale-95 transition-all w-fit"><Menu size={22}/></button>
-
-          <div className="flex flex-col gap-1.5 p-3 border border-slate-200 shadow-lg rounded-2xl bg-white/95 backdrop-blur-md text-slate-800 min-w-[140px]">
-            <div className="flex items-center gap-2 text-xs font-black">
-              <Wallet size={14} className="text-emerald-600 shrink-0"/>
-              <span>Solde : <span className="text-slate-900">{Number(userData?.solde || 0).toLocaleString()} F</span></span>
-            </div>
-            <div className="w-full h-[1px] bg-slate-100" />
-            <div className="flex items-center gap-2 text-xs font-black">
-              <Coins size={14} className="text-amber-500 shrink-0"/>
-              <span>Jetons : <span className="text-slate-900">{Number(userData?.jetons || 0).toLocaleString()}</span></span>
-            </div>
+      <div className="absolute top-0 left-0 right-0 z-20 p-3 pointer-events-none">
+        <div className="flex items-center justify-between gap-2 pointer-events-auto">
+          <button
+            onClick={() => setIsMenuOpen(true)}
+            className="p-2.5 bg-white rounded-xl shadow-lg"
+          >
+            <Menu size={20} className="text-slate-800" />
+          </button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              onClick={toggleOnlineStatus}
+              disabled={loadingStatus}
+              className={`px-4 py-2.5 rounded-xl font-bold text-[9px] shadow-xl border transition-all active:scale-95 ${
+                isOnline
+                  ? "bg-emerald-600 text-white border-emerald-500"
+                  : "bg-white text-slate-400 border-slate-100"
+              }`}
+            >
+              <Power size={14} className="inline mr-2" />{" "}
+              {isOnline ? "EN LIGNE" : "HORS LIGNE"}
+            </button>
+            <button
+              onClick={() => setShowBadgeModal(true)}
+              className="px-4 py-2.5 rounded-xl font-bold text-[9px] shadow-xl flex items-center gap-2 bg-white text-slate-800 border border-slate-100 transition-all active:scale-95"
+            >
+              <QrCode size={12} className="text-emerald-600" /> MON BADGE QR
+            </button>
+            <button
+              onClick={() => setShowPassModal(true)}
+              className={`px-4 py-2.5 rounded-xl font-bold text-[9px] shadow-xl flex items-center gap-2 transition-all active:scale-95 ${
+                isFreeModeActive()
+                  ? "bg-emerald-600 text-white"
+                  : "bg-indigo-600 text-white"
+              }`}
+            >
+              <Zap size={12} fill={isFreeModeActive() ? "white" : "none"} />
+              {isFreeModeActive() ? "PASS GRATUIT ACTIF" : "ACTIVER PASS GRATUIT"}
+            </button>
           </div>
-        </div>
-
-        <div className="flex flex-col items-end gap-2 pointer-events-auto">
-          <button onClick={toggleOnlineStatus} disabled={loadingStatus} className={`px-5 py-3 rounded-2xl font-black text-[10px] shadow-xl border-2 transition-all active:scale-95 ${isOnline ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-400 border-slate-100"}`}>
-            <Power size={14} className="inline mr-2"/> {isOnline ? "EN LIGNE" : "HORS LIGNE"}
-          </button>
-          <button onClick={() => setShowBadgeModal(true)} className="px-4 py-2.5 rounded-xl font-bold text-[9px] shadow-xl flex items-center gap-2 bg-white text-slate-800 border border-slate-100 transition-all active:scale-95">
-            <QrCode size={12} className="text-emerald-600"/> MON BADGE QR
-          </button>
-          <button onClick={() => setShowPassModal(true)} className={`px-4 py-2.5 rounded-xl font-bold text-[9px] shadow-xl flex items-center gap-2 transition-all active:scale-95 ${isFreeModeActive() ? "bg-emerald-600 text-white" : "bg-indigo-600 text-white"}`}>
-            <Zap size={12} fill={isFreeModeActive() ? "white" : "none"}/>
-            {isFreeModeActive() ? "PASS FREE ACTIF" : "ACTIVER PASS FREE"}
-          </button>
         </div>
       </div>
 
-      {/* PANNEAU INFÉRIEUR COULISSANT */}
-      <div className="fixed bottom-0 left-0 right-0 z-10 bg-white/95 backdrop-blur-2xl border-t border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.15)] rounded-t-[36px] transition-all duration-100 ease-out" style={{ height: `${panelHeight}vh` }}>
-        {internalAlert && (
-          <div className={`absolute -top-16 left-4 right-4 p-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 ${internalAlert.type === "success" ? "bg-emerald-600 text-white" : "bg-slate-900 text-white"}`}>
-            {internalAlert.type === "success" ? <CheckCircle2 size={20}/> : <AlertCircle size={20} className="text-amber-400"/>}
-            <span className="text-sm font-bold">{internalAlert.message}</span>
-          </div>
-        )}
-
-        <div className="flex flex-col items-center py-3.5 cursor-grab active:cursor-grabbing" onMouseDown={handleDragStart} onTouchStart={handleDragStart}>
-          <div className="w-12 h-1.5 bg-slate-300 rounded-full"/>
-        </div>
-
-        <div className="h-full px-6 pb-24 overflow-y-auto">
-          <div className="flex items-center gap-2 mb-4">
-            <h3 className="m-0 text-sm font-black tracking-wider uppercase text-slate-800">{livreurName}</h3>
-            <span className="flex items-center gap-1 text-[11px] font-black text-emerald-600 uppercase tracking-wider bg-emerald-50 px-2 py-0.5 rounded-md">
-              <ShieldCheck size={12} /> {driverZoneName}
-            </span>
-          </div>
-
-          {mission ? (
-            <div className="duration-300 animate-in fade-in">
-              {mission.isCompteur && <TaxiMeter missionId={mission.id} userRole="livreur" currentDistance={distanceKm}/>}
-
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-emerald-50 rounded-2xl"><ShoppingBag size={22} className="text-emerald-600"/></div>
-                  <div>
-                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Statut</span>
-                    <span className="text-sm font-black uppercase text-emerald-600">{mission.status.replace(/_/g, ' ')}</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Prix Course</span>
-                  <p className="text-2xl font-black text-slate-900">{mission.price || 0} F</p>
-                </div>
-              </div>
-
-              {["accepted", "arrived_at_pickup", "in_transit"].includes(mission.status) && (
-                <>
-                  <button onClick={() => setNavigationMode(true)} className="flex items-center justify-center w-full gap-3 p-4 mb-3 font-black text-white transition-all shadow-lg bg-slate-900 rounded-2xl active:scale-95">
-                    <Zap size={18} className="text-amber-400 fill-amber-400" /> NAVIGATION ULTIMATE
-                  </button>
-                  <a href={`tel:${mission.clientPhone}`} className="flex items-center justify-center w-full gap-3 p-3.5 mb-4 font-black transition-colors border-2 text-emerald-600 border-emerald-100 rounded-2xl active:bg-emerald-50">
-                    <Phone size={18}/> CONTACTER CLIENT
-                  </a>
-                </>
-              )}
-
-              <div className="p-4 mb-6 space-y-3 border border-slate-100 bg-slate-50 rounded-2xl">
-                <div className="flex items-start gap-3">
-                  <div className="flex items-center justify-center rounded-lg w-7 h-7 text-slate-500 bg-slate-200 shrink-0"><MapPin size={15}/></div>
-                  <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ramassage</p><p className="text-xs font-bold text-slate-800">{mission.pickupAddress || "Non spécifiée"}</p></div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="flex items-center justify-center rounded-lg w-7 h-7 text-emerald-600 bg-emerald-100 shrink-0"><ChevronRight size={15}/></div>
-                  <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Destination</p><p className="text-xs font-bold text-slate-800">{mission.destination || "Non spécifiée"}</p></div>
-                </div>
-              </div>
-
-              {mission.status === "offering" ? (
-                <div className="space-y-3">
-                  {isFreeModeActive() ? (
-                    <button 
-                      onClick={() => acceptCourse(mission.id, "pass_free")} 
-                      disabled={isProcessing} 
-                      className="w-full py-5 text-xs font-black text-white uppercase transition-all shadow-xl bg-emerald-600 rounded-2xl active:scale-95"
-                    >
-                      ⚡ CONFIRMER LA MISSION (FREE)
-                    </button>
-                  ) : (
-                    <div className="flex flex-col gap-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <button 
-                          onClick={() => acceptCourse(mission.id, "solde")} 
-                          disabled={isProcessing} 
-                          className="flex flex-col items-center justify-center py-3.5 px-2 text-[11px] font-black text-white uppercase transition-all shadow-md bg-emerald-600 rounded-2xl active:scale-95 border-b-4 border-emerald-800"
-                        >
-                          <span>Accepter (Solde)</span>
-                          <span className="text-[9px] text-emerald-100 font-medium normal-case mt-0.5">-13% Commission</span>
-                        </button>
-                        <button 
-                          onClick={() => acceptCourse(mission.id, "jetons")} 
-                          disabled={isProcessing} 
-                          className="flex flex-col items-center justify-center py-3.5 px-2 text-[11px] font-black text-white uppercase transition-all shadow-md bg-amber-600 rounded-2xl active:scale-95 border-b-4 border-amber-800"
-                        >
-                          <span>Accepter (Jeton)</span>
-                          <span className="text-[9px] text-amber-100 font-medium normal-case mt-0.5">-17% Commission</span>
-                        </button>
-                      </div>
-                      <button onClick={handleReject} className="w-full py-3.5 text-xs font-black text-red-500 uppercase transition-colors bg-red-50 hover:bg-red-100 rounded-2xl">
-                        Refuser la proposition
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : mission.status === "accepted" ? (
-                <button
-                  onClick={() => updateMissionStatus("arrived_at_pickup")}
-                  disabled={isProcessing}
-                  className="w-full py-4 text-xs font-black text-white uppercase bg-indigo-600 shadow-xl rounded-2xl active:scale-95"
-                >
-                  📍 JE SUIS ARRIVÉ AU RAMASSAGE
-                </button>
-              ) : mission.status === "arrived_at_pickup" ? (
-                <div className="space-y-3">
-                  <div className="p-4 space-y-2 border bg-amber-50 border-amber-200 rounded-2xl">
-                    <div className="flex items-center gap-2 text-xs font-bold text-amber-800">
-                      <KeyRound size={16} /> Validation de passation obligatoire
-                    </div>
-                    <p className="text-[11px] text-amber-700">Entrez le code à 6 chiffres transmis par le coursier pour débuter la livraison.</p>
-                    <div className="flex gap-2">
-                      <input 
-                        type="text" 
-                        maxLength={6}
-                        placeholder="000000"
-                        value={pickupCodeInput}
-                        onChange={(e) => setPickupCodeInput(e.target.value)}
-                        className="w-full p-3 text-lg font-black tracking-widest text-center bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
-                      />
-                      <button 
-                        onClick={handleValidatePickupCode}
-                        disabled={isVerifyingCode}
-                        className="px-5 py-3 text-xs font-black text-white bg-indigo-600 shadow-md rounded-xl active:scale-95 shrink-0"
-                      >
-                        {isVerifyingCode ? <Loader2 size={16} className="animate-spin" /> : "VALIDER"}
-                      </button>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => updateMissionStatus("in_transit")}
-                    disabled={isProcessing}
-                    className="w-full py-4 text-xs font-black text-white uppercase shadow-xl bg-emerald-600 rounded-2xl active:scale-95"
-                  >
-                    🚀 DÉBUTER LE TRANSIT
-                  </button>
-                </div>
-              ) : mission.status === "in_transit" ? (
-                <button
-                  onClick={() => updateMissionStatus("completed")}
-                  disabled={isProcessing}
-                  className="w-full py-4 text-xs font-black text-white uppercase shadow-xl bg-emerald-600 rounded-2xl active:scale-95"
-                >
-                  🏁 TERMINER LA MISSION
-                </button>
-              ) : null}
-            </div>
-          ) : (
-            <div className="py-8 space-y-3 text-center">
-              <div className="inline-flex p-4 mb-2 rounded-full bg-slate-100 text-slate-400">
-                <ShoppingBag size={32} />
-              </div>
-              <h4 className="text-sm font-black tracking-wider uppercase text-slate-700">Aucune mission en cours</h4>
-              <p className="max-w-xs mx-auto text-xs text-slate-500">
-                {isOnline 
-                  ? "Vous êtes en ligne. Restez à proximité des zones d'activité pour recevoir des demandes."
-                  : "Basculez en mode EN LIGNE pour recevoir des propositions de courses dans votre zone."}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* MODALE / PAGE D'INSTRUCTIONS PASS FREE */}
-      {showPassModal && (
-        <div className="fixed inset-0 z-[400] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-md p-6 space-y-5 duration-200 bg-white shadow-2xl rounded-3xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Zap className="text-indigo-600 fill-indigo-600" size={20} />
-                <h3 className="text-base font-black text-slate-900">INSTRUCTIONS - PASS FREE</h3>
-              </div>
-              <button onClick={() => setShowPassModal(false)} className="p-2 text-slate-400 hover:text-slate-600"><X size={20}/></button>
-            </div>
-
-            {/* GUIDE D'INSTRUCTIONS PAS À PAS */}
-            <div className="space-y-3">
-              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">1</span>
-                  <h4 className="text-xs font-black uppercase text-slate-900">Enregistrer le contact Assistance</h4>
-                </div>
-                <p className="text-[11px] text-slate-600 pl-7 leading-relaxed font-medium">
-                  Enregistrez notre numéro d'assistance afin de valider et confirmer votre reçu.
-                </p>
-              </div>
-
-              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">2</span>
-                  <h4 className="text-xs font-black uppercase text-slate-900">Effectuer le règlement Wave</h4>
-                </div>
-                <p className="text-[11px] text-slate-600 pl-7 leading-relaxed font-medium">
-                  Réalisez le paiement correspondant à votre forfait ({isExterne ? "1 000 F / 2 000 F" : "5 000 F / 10 000 F"}).
-                </p>
-              </div>
-
-              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">3</span>
-                  <h4 className="text-xs font-black uppercase text-slate-900">Transmettre le reçu complet</h4>
-                </div>
-                <p className="text-[11px] text-slate-600 pl-7 leading-relaxed font-medium">
-                  Envoyez la capture d'écran de l'interface Wave via notre page de dépôt dédiée pour activer votre pass.
-                </p>
-              </div>
-            </div>
-
-            {/* MESSAGE RAPPEL DE CONFORMITÉ */}
-            <div className="p-3 border bg-emerald-50 border-emerald-200/80 rounded-2xl">
-              <p className="text-[11px] font-bold text-emerald-900 leading-relaxed">
-                L'objectif est d'amener l'utilisateur à enregistrer le contact assistance pour confirmer son paiement par contrôle du reçu complet depuis l'interface Wave.
-              </p>
-            </div>
-
-            {/* BOUTON D'ACTION DE REDIRECTION */}
-            <div className="pt-1 space-y-2">
+      {showBadgeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm p-6 bg-white shadow-2xl rounded-3xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-black text-slate-900">
+                Mon Badge QR Livreur
+              </h3>
               <button
-                onClick={handleGoToUpload}
-                className="flex items-center justify-center w-full gap-2 px-4 py-4 text-xs font-black tracking-wide text-white uppercase transition-all bg-indigo-600 shadow-xl hover:bg-indigo-700 rounded-2xl active:scale-95"
+                onClick={() => setShowBadgeModal(false)}
+                className="p-2 rounded-full text-slate-400"
               >
-                <UploadCloud size={18} />
-                <span>POURSUIVRE VERS RECHARGEMENT</span>
-                <ArrowRight size={16} />
+                <X size={20} />
               </button>
             </div>
-
-            <button 
-              onClick={() => setShowPassModal(false)}
-              className="w-full py-2.5 text-xs font-black text-slate-400 hover:text-slate-600 uppercase transition-colors"
+            <div className="flex flex-col items-center justify-center p-6 mb-4 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
+              <QrCode size={120} className="mb-3 text-slate-800" />
+              <p className="text-xs font-bold text-center text-slate-600">
+                {auth?.currentUser?.uid}
+              </p>
+              <span className="mt-2 text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
+                {livreurName} — {driverZoneName}
+              </span>
+            </div>
+            <button
+              onClick={() => setShowBadgeModal(false)}
+              className="w-full py-3 text-xs font-black text-white uppercase bg-slate-900 rounded-xl"
             >
               Fermer
             </button>
@@ -827,27 +1318,493 @@ export default function LivreurExterne({ onNavigateToUpload }) {
         </div>
       )}
 
-      {/* MODALE BADGE QR */}
-      {showBadgeModal && (
-        <div className="fixed inset-0 z-[400] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-sm p-6 space-y-4 text-center duration-200 bg-white shadow-2xl rounded-3xl animate-in fade-in zoom-in-95">
-            <div className="flex justify-end">
-              <button onClick={() => setShowBadgeModal(false)} className="p-1 text-slate-400 hover:text-slate-600"><X size={20}/></button>
+      {showPassModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm p-6 bg-white shadow-2xl rounded-3xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-black text-slate-900">
+                Pass Gratuit Livreur
+              </h3>
+              <button
+                onClick={() => setShowPassModal(false)}
+                className="p-2 rounded-full text-slate-400"
+              >
+                <X size={20} />
+              </button>
             </div>
-            <div className="flex items-center justify-center w-16 h-16 p-4 mx-auto rounded-full bg-emerald-50 text-emerald-600">
-              <QrCode size={32} />
+
+            <div className="p-4 mb-4 border border-indigo-100 rounded-2xl bg-indigo-50">
+              <div className="flex items-center gap-3 mb-2">
+                <Zap size={24} className="text-indigo-600 fill-indigo-600" />
+                <div>
+                  <h4 className="text-xs font-black text-indigo-900 uppercase">
+                    Statut du Pass
+                  </h4>
+                  <p className="text-xs font-bold text-indigo-700">
+                    {isFreeModeActive() ? "Actuellement Actif" : "Inactif"}
+                  </p>
+                </div>
+              </div>
+              <p className="text-[11px] leading-relaxed text-indigo-600">
+                Sans commission sur les livraisons pendant la durée du Pass.
+                {isExterneZone() && (
+                  <span className="block mt-1 font-bold text-emerald-700">
+                    Tarif zone externe appliqué
+                  </span>
+                )}
+              </p>
             </div>
-            <div>
-              <h3 className="text-lg font-black text-slate-900">{livreurName}</h3>
-              <p className="mt-1 text-xs font-bold tracking-wider uppercase text-slate-500">{driverZoneName}</p>
-            </div>
-            <div className="p-4 font-mono text-xs break-all border bg-slate-50 rounded-2xl border-slate-100 text-slate-600">
-              ID: {auth.currentUser?.uid || "N/A"}
-            </div>
-            <p className="text-[10px] font-bold text-slate-400">Présentez ce badge lors des contrôles et passations de courses.</p>
+
+            {!isFreeModeActive() && (
+              <div className="mb-4 space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  Enregistrez le contact assistance, payez sur Wave et envoyez le reçu complet
+                </p>
+                <div className="flex items-center justify-between w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50">
+                  <span className="text-xs font-black text-slate-800">
+                    12 heures
+                  </span>
+                  <span className="text-sm font-black text-indigo-600">
+                    {passPrices.h12.toLocaleString()} F
+                  </span>
+                </div>
+                <div className="flex items-center justify-between w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50">
+                  <span className="text-xs font-black text-slate-800">
+                    24 heures
+                  </span>
+                  <span className="text-sm font-black text-indigo-600">
+                    {passPrices.h24.toLocaleString()} F
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => setShowPassModal(false)}
+              className="w-full py-3 text-xs font-black text-white uppercase bg-indigo-600 rounded-xl"
+            >
+              {isFreeModeActive() ? "Compris" : "Fermer"}
+            </button>
           </div>
         </div>
       )}
+
+      <div
+        className={`livreur-bottom-panel ${isDragging ? "is-dragging" : ""}`}
+        style={{ height: `${panelHeight}vh` }}
+      >
+        {internalAlert && (
+          <div
+            className={`absolute -top-16 left-4 right-4 p-4 rounded-2xl shadow-2xl flex items-center gap-3 ${
+              internalAlert.type === "success"
+                ? "bg-emerald-600 text-white"
+                : "bg-slate-900 text-white"
+            }`}
+          >
+            {internalAlert.type === "success" ? (
+              <CheckCircle2 size={20} />
+            ) : (
+              <AlertCircle size={20} className="text-amber-400" />
+            )}
+            <span className="text-sm font-bold">{internalAlert.message}</span>
+          </div>
+        )}
+
+        <div
+          className="flex flex-col items-center py-3.5 cursor-grab active:cursor-grabbing select-none touch-none livreur-panel-handle"
+          onMouseDown={handleDragStart}
+          onTouchStart={handleDragStart}
+          style={{ touchAction: "none" }}
+        >
+          <div className="w-12 h-1.5 bg-slate-300 rounded-full" />
+          <span className="mt-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+            Glisser
+          </span>
+        </div>
+
+        <div className="h-full px-6 pb-24 overflow-y-auto livreur-panel-scroll">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <h3 className="m-0 text-sm font-black tracking-wider uppercase text-slate-800">
+                {livreurName}
+              </h3>
+              <span className="flex items-center gap-1 text-[11px] font-black text-emerald-600 uppercase tracking-wider bg-emerald-50 px-2 py-0.5 rounded-md">
+                <ShieldCheck size={12} /> {driverZoneName}
+              </span>
+            </div>
+            <span className="text-[10px] font-bold text-slate-400">
+              {currentTime.toLocaleTimeString()}
+            </span>
+          </div>
+
+          {mission &&
+          (mission.status === "pending" || mission.status === "offering") ? (
+            <div className="p-4 mb-4 border bg-amber-50 border-amber-200 rounded-2xl">
+              <h4 className="mb-1 text-sm font-black text-amber-900">
+                {isNegoMission
+                  ? "Livraison négociée !"
+                  : "Nouvelle proposition de livraison !"}
+              </h4>
+              <p className="mb-2 text-xs text-amber-700">
+                {isNegoMission ? (
+                  <>
+                    Client propose <strong>{price.toLocaleString()} F</strong>
+                    {basePrice > 0 && basePrice !== price && (
+                      <span className="text-amber-600">
+                        {" "}
+                        (réf. {basePrice.toLocaleString()} F)
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>Livraison de {price.toLocaleString()} F CFA.</>
+                )}{" "}
+                Choisissez votre mode de paiement :
+              </p>
+
+              {(mission.courseMode || mission.mode) && (
+                <span className="inline-block px-2 py-1 mb-2 text-[10px] font-black uppercase rounded-lg bg-slate-100 text-slate-700">
+                  {mission.courseMode || mission.mode}
+                </span>
+              )}
+
+              {isNegoMission && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {mission.wantClim && (
+                    <span className="px-2 py-1 text-[10px] font-black uppercase rounded-lg bg-sky-100 text-sky-700">
+                      ❄️ Climatisation
+                    </span>
+                  )}
+                  {mission.wantArret && (
+                    <span className="px-2 py-1 text-[10px] font-black uppercase rounded-lg bg-orange-100 text-orange-700">
+                      📍 Arrêt(s)
+                    </span>
+                  )}
+                  <span className="px-2 py-1 text-[10px] font-black uppercase rounded-lg bg-indigo-100 text-indigo-700">
+                    Négociation
+                  </span>
+                </div>
+              )}
+
+              {otherPendingCourses.length > 0 && (
+                <div className="p-2 mb-3 border bg-white/80 border-amber-100 rounded-xl">
+                  <p className="mb-2 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                    Autres livraisons ({otherPendingCourses.length})
+                  </p>
+                  <div className="flex flex-col gap-1.5 max-h-28 overflow-y-auto">
+                    {otherPendingCourses.slice(0, 5).map((c) => {
+                      const p = Number(c.proposedPrice || c.price || 0);
+                      const nego = !!(c.isNegoActive || c.isArrangement);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setMission(c)}
+                          className="flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg border-slate-100 bg-slate-50 hover:bg-indigo-50"
+                        >
+                          <span className="text-[11px] font-bold text-slate-700 truncate max-w-[55%]">
+                            {c.pickupAddress ||
+                              c.destination ||
+                              c.dropoffAddress ||
+                              "Livraison"}
+                          </span>
+                          <span className="text-[11px] font-black text-slate-900">
+                            {p.toLocaleString()} F
+                            {nego ? " · Négo" : ""}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {offerCountdown != null && (
+                <div className="mb-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-800">
+                      Temps pour accepter
+                    </span>
+                    <span className="text-xs font-black text-amber-900 tabular-nums">
+                      {offerCountdown}s
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-amber-200/80">
+                    <div
+                      className="h-full transition-all duration-200 rounded-full bg-amber-500"
+                      style={{
+                        width: `${Math.max(
+                          0,
+                          Math.min(100, (offerCountdown / 55) * 100)
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2 mb-3">
+                <button
+                  onClick={() => acceptCourseWithMode(mission.id, "solde")}
+                  disabled={isProcessing}
+                  className="flex items-center justify-between w-full px-4 py-3 text-xs font-black text-white uppercase bg-emerald-600 rounded-xl disabled:opacity-50"
+                >
+                  <span className="flex items-center gap-2">
+                    <Wallet size={16} /> Payer avec Solde
+                  </span>
+                  <span className="px-2 py-0.5 bg-emerald-800 rounded text-[11px]">
+                    -13% ({costSolde13} F)
+                  </span>
+                </button>
+                <button
+                  onClick={() => acceptCourseWithMode(mission.id, "jeton")}
+                  disabled={isProcessing}
+                  className="flex items-center justify-between w-full px-4 py-3 text-xs font-black text-white uppercase bg-amber-500 rounded-xl disabled:opacity-50"
+                >
+                  <span className="flex items-center gap-2">
+                    <Coins size={16} /> Payer avec Bonus Jeton
+                  </span>
+                  <span className="px-2 py-0.5 bg-amber-700 rounded text-[11px]">
+                    -17% (-{discountJetons17} F)
+                  </span>
+                </button>
+              </div>
+
+              <button
+                onClick={() => handleReject(mission.id)}
+                disabled={isProcessing}
+                className="w-full py-2.5 text-xs font-black uppercase text-slate-600 bg-slate-200 rounded-xl disabled:opacity-50"
+              >
+                Refuser la livraison
+              </button>
+            </div>
+          ) : mission ? (
+            <div>
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-emerald-50 rounded-2xl">
+                    <ShoppingBag size={22} className="text-emerald-600" />
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      Statut
+                    </span>
+                    <span className="text-sm font-black uppercase text-emerald-600">
+                      {STATUS_FR[mission.status] ||
+                        mission.status.replace(/_/g, " ")}
+                    </span>
+                    {(mission.courseMode || mission.mode) && (
+                      <span className="block text-[10px] font-bold text-slate-500 mt-0.5">
+                        {mission.courseMode || mission.mode}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Tarif
+                  </span>
+                  <p className="text-2xl font-black text-slate-900">{price} F</p>
+                  {distanceKm > 0 && (
+                    <p className="text-[11px] font-bold text-slate-500">
+                      {distanceKm} km · ~{durationMin} min
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {[
+                "accepted",
+                "arrived_at_pickup",
+                "ready_for_pickup",
+                "in_transit",
+                "arrived_at_client",
+              ].includes(mission.status) && (
+                <div className="flex flex-col gap-2 mb-3">
+                  {mission.status === "accepted" && (
+                    <button
+                      onClick={handleNotifyArrivalAndRequestCommission}
+                      disabled={isNotifyingArrival || isProcessing}
+                      className="w-full py-3.5 text-xs font-black text-white uppercase bg-indigo-600 rounded-2xl disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isNotifyingArrival ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />{" "}
+                          Notification...
+                        </>
+                      ) : (
+                        "Arrivé au point de ramassage"
+                      )}
+                    </button>
+                  )}
+
+                  {(mission.status === "arrived_at_pickup" ||
+                    mission.status === "ready_for_pickup") && (
+                    <>
+                      {needsCommission && !commissionPaid && (
+                        <div className="p-3 mb-1 text-center border bg-amber-50 border-amber-200 rounded-xl">
+                          <p className="text-xs font-bold text-amber-800">
+                            Enregistrez le contact assistance et envoyez le reçu complet Wave pour valider le paiement.
+                          </p>
+                        </div>
+                      )}
+                      <button
+                        onClick={(e) => updateMissionStatus("in_transit", e)}
+                        disabled={
+                          isProcessing || 
+                          (needsCommission && !commissionPaid && !mission?.paymentVerified)
+                        }
+                        className="w-full py-3.5 text-xs font-black text-white uppercase bg-blue-600 rounded-2xl disabled:opacity-50"
+                      >
+                        Démarrer la livraison vers le client
+                      </button>
+                    </>
+                  )}
+
+                  {mission.status === "in_transit" && (
+                    <button
+                      onClick={(e) => updateMissionStatus("arrived_at_client", e)}
+                      disabled={isProcessing}
+                      className="w-full py-3.5 text-xs font-black text-white uppercase bg-amber-600 rounded-2xl disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      <MapPin size={16} /> Arrivé chez le client
+                    </button>
+                  )}
+
+                  {mission.status === "arrived_at_client" && (
+                    <div className="space-y-2">
+                      {articlePaymentValidated ? (
+                        <div className="p-3 text-center border bg-emerald-50 border-emerald-200 rounded-xl">
+                          <p className="text-xs font-bold text-emerald-800">
+                            ✅ Paiement du client validé par l'IA. Vous pouvez remettre la commande.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-3 text-center border bg-amber-50 border-amber-200 rounded-xl">
+                          <p className="text-xs font-bold text-amber-800">
+                            ⏳ En attente du reçu Wave du client (vérification automatique OCR).
+                            Ne remettez pas la commande avant validation.
+                          </p>
+                        </div>
+                      )}
+                      <button
+                        onClick={(e) => updateMissionStatus("completed", e)}
+                        disabled={isProcessing || !articlePaymentValidated}
+                        title={
+                          !articlePaymentValidated
+                            ? "En attente de la validation automatique du paiement du client"
+                            : undefined
+                        }
+                        className="w-full py-3.5 text-xs font-black text-white uppercase bg-emerald-600 rounded-2xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        <CheckCircle2 size={16} /> Confirmer la remise & Terminer
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {[
+                "accepted",
+                "arrived_at_pickup",
+                "ready_for_pickup",
+                "in_transit",
+                "arrived_at_client",
+              ].includes(mission.status) && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setNavigationMode(true);
+                    }}
+                    className="flex items-center justify-center w-full gap-3 p-4 mb-2 font-black text-white bg-slate-900 rounded-2xl"
+                  >
+                    <Navigation size={18} className="text-amber-400" />{" "}
+                    NAVIGATION GPS
+                  </button>
+                  <div className="flex gap-2 mb-4">
+                    <a
+                      href={`tel:${
+                        mission.clientPhone ||
+                        mission.clientTel ||
+                        mission.telephoneClient ||
+                        mission.thirdPartyPhone ||
+                        ""
+                      }`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex-1 flex items-center justify-center gap-2 p-3.5 font-black border-2 text-emerald-600 border-emerald-100 rounded-2xl text-xs"
+                    >
+                      <Phone size={16} /> APPELER CLIENT
+                    </a>
+                  </div>
+                </>
+              )}
+
+              <div className="p-4 mb-6 space-y-3 border border-slate-100 bg-slate-50 rounded-2xl">
+                <div className="flex items-start gap-3">
+                  <div className="flex items-center justify-center text-indigo-600 bg-indigo-100 rounded-lg w-7 h-7 shrink-0">
+                    <User size={15} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      Client
+                    </p>
+                    <p className="text-xs font-bold text-slate-800">
+                      {mission.thirdPartyName ||
+                        mission.clientName ||
+                        mission.nomClient ||
+                        "Non spécifié"}
+                    </p>
+                    <p className="text-[11px] font-semibold text-slate-500">
+                      {mission.thirdPartyPhone ||
+                        mission.clientPhone ||
+                        mission.clientTel ||
+                        mission.telephoneClient ||
+                        "Pas de téléphone"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex items-center justify-center text-blue-600 bg-blue-100 rounded-lg w-7 h-7 shrink-0">
+                    <MapPin size={15} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      Ramassage
+                    </p>
+                    <p className="text-xs font-bold text-slate-800">
+                      {mission.pickupAddress ||
+                        mission.adresse ||
+                        "Non spécifiée"}
+                    </p>
+                  </div>
+                </div>
+                {(mission.destination || mission.dropoffAddress) && (
+                  <div className="flex items-start gap-3">
+                    <div className="flex items-center justify-center rounded-lg text-emerald-600 bg-emerald-100 w-7 h-7 shrink-0">
+                      <MapPin size={15} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        Destination Client
+                      </p>
+                      <p className="text-xs font-bold text-slate-800">
+                        {mission.destination || mission.dropoffAddress}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-11 text-slate-400">
+              <p className="text-xs font-bold tracking-wider uppercase">
+                En attente d'une livraison...
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

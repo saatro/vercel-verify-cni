@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useCallback } from "react";
 import { 
   GoogleAuthProvider,
@@ -7,7 +8,7 @@ import {
   onAuthStateChanged
 } from "firebase/auth";
 import { auth, db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import { Loader2, ArrowLeft, Smartphone, Lock, RefreshCcw } from "lucide-react";
@@ -29,15 +30,27 @@ export default function LoginMarketplace() {
   const processUserNavigation = useCallback(async (user) => {
     if (!user) return;
     try {
-      const userDoc = await getDoc(doc(db, "users", user.uid));
+      console.log("🔍 Récupération du profil Firestore pour l'UID :", user.uid);
+      await user.getIdToken(true);
+
+      const userDocRef = doc(db, "users", user.uid);
+      let userDoc = await getDoc(userDocRef);
       
+      if (!userDoc.exists()) {
+        const altDoc = await getDoc(doc(db, "user", user.uid));
+        if (altDoc.exists()) {
+          userDoc = altDoc;
+        }
+      }
+
       if (userDoc.exists()) {
         const userData = userDoc.data();
         const role = userData.role?.toLowerCase().trim() || "client";
+        console.log("Rôle utilisateur détecté :", role);
         
         const routes = {
           admin: "/admin-home",
-          livreur: "/livreur-home",
+          livreur: "/marketplace-full",
           vendeur: "/vendeur-dashboard",
           client: "/marketplace-full",
           guess: "/marketplace-full"
@@ -46,30 +59,34 @@ export default function LoginMarketplace() {
         toast.success(`Heureux de vous revoir !`);
         navigate(routes[role] || "/marketplace-full", { replace: true });
       } else {
-        // Nouvel utilisateur : direction inscription
-        toast.info("Finalisons votre profil Mambo.");
-        navigate("/inscription-client", { 
-          replace: true,
-          state: { 
-            uid: user.uid, 
-            email: user.email || `${cleanPhone(phone)}@mambo.com`, 
-            displayName: user.displayName || "",
-            isGoogleAuth: activeTab === "google"
-          } 
-        });
+        console.warn("⚠️ Document Firestore introuvable. Création automatique du profil client par défaut...");
+        
+        const defaultData = {
+          uid: user.uid,
+          telephone: phone || "",
+          role: "client",
+          createdAt: serverTimestamp()
+        };
+        
+        await setDoc(userDocRef, defaultData, { merge: true });
+        console.log("✅ Profil client initialisé avec succès dans Firestore.");
+        
+        toast.success("Profil initialisé avec succès !");
+        navigate("/marketplace-full", { replace: true });
       }
     } catch (err) {
-      console.error("Erreur de récupération Firestore:", err);
+      console.error("❌ Erreur de récupération Firestore:", err);
       toast.error("Problème lors de la récupération de votre profil.");
       setLoading(false);
       setSubmitting(false);
     }
-  }, [navigate, activeTab, phone]);
+  }, [navigate, phone]);
 
   // --- SURVEILLANCE DE LA SESSION AUTOMATIQUE ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
+        console.log("⚡ Session active détectée pour :", user.email || user.uid);
         await processUserNavigation(user);
       } else {
         setLoading(false);
@@ -83,30 +100,38 @@ export default function LoginMarketplace() {
     e.preventDefault();
     if (submitting) return;
 
-    const cleanTelephone = cleanPhone(phone);
-    if (cleanTelephone.length !== 10 || pattern.length < 3) {
+    let cleanTelephone = cleanPhone(phone);
+    if (cleanTelephone.length === 10 && !cleanTelephone.startsWith("225")) {
+      cleanTelephone = "225" + cleanTelephone;
+    }
+
+    console.log("📱 Tentative de connexion avec le téléphone :", cleanTelephone);
+
+    if (cleanTelephone.length !== 13 || pattern.length < 3) {
       return toast.error("Vérifiez votre numéro à 10 chiffres et votre schéma.");
     }
 
     setSubmitting(true);
-    const technicalEmail = buildEmail("", cleanTelephone, "client");
+    // Utilisation stricte du domaine technique correct aligné avec PageInscriptionClient.js[cite: 7]
+    const technicalEmail = `${cleanTelephone}@livraison-moto.firebaseapp.com`;
     const technicalPassword = generatePatternPassword(pattern, cleanTelephone);
 
     try {
-      // Tentative de connexion directe si le compte existe déjà
+      console.log("🔑 Authentification Firebase avec l'e-mail technique :", technicalEmail);
       const res = await signInWithEmailAndPassword(auth, technicalEmail, technicalPassword);
+      console.log("✅ Connexion Firebase réussie. UID :", res.user.uid);
       await processUserNavigation(res.user);
     } catch (error) {
-      console.warn("Erreur Firebase Auth rencontrée:", error.code);
+      console.warn("⚠️ Erreur Firebase Auth rencontrée, code :", error.code);
 
-      // Traitement alternatif si le compte technique est inexistant (première connexion)
       if (error.code === "auth/user-not-found" || error.code === "auth/invalid-credential") {
         try {
-          console.log("Compte introuvable. Initialisation de l'inscription technique de secours...");
+          console.log("🛠️ Compte introuvable. Création automatique du compte technique de secours...");
           const signUpRes = await createUserWithEmailAndPassword(auth, technicalEmail, technicalPassword);
+          console.log("✅ Compte de secours créé avec succès. UID :", signUpRes.user.uid);
           await processUserNavigation(signUpRes.user);
         } catch (signUpError) {
-          console.error("Échec de l'inscription automatique de secours:", signUpError);
+          console.error("❌ Échec de l'inscription automatique de secours :", signUpError);
           setSubmitting(false);
           if (signUpError.code === "auth/email-already-in-use") {
             toast.error("Ce numéro est associé à un autre mot de passe / schéma.");
@@ -121,7 +146,7 @@ export default function LoginMarketplace() {
         } else if (error.code === "auth/network-request-failed") {
           toast.error("Problème de connexion réseau. Veuillez réessayer.");
         } else {
-          toast.error("Une erreur d'authentification est survenue.");
+          toast.error(`Erreur d'authentification : ${error.code}`);
         }
       }
     }
@@ -140,7 +165,7 @@ export default function LoginMarketplace() {
         await processUserNavigation(result.user);
       }
     } catch (error) {
-      console.error("Erreur Google Popup:", error);
+      console.error("❌ Erreur Google Popup:", error);
       setSubmitting(false);
       if (error.code !== "auth/popup-closed-by-user") {
         toast.error("La connexion Google a échoué.");

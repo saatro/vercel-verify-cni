@@ -1,7 +1,5 @@
 /* eslint-disable no-unused-vars */
 // MarketplaceFull.jsx
-// Fix shrunk : useRef sur le scroll container + useCallback stable
-// Layout : position:fixed header + flex main scroll
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { collection, query, onSnapshot, getDoc, doc } from "firebase/firestore";
@@ -30,11 +28,13 @@ import "react-toastify/dist/ReactToastify.css";
 import "./MarketplaceFull.css";
 import logoImg from "../assets/MAMBO PREMIUM.png";
 
-// ── Catégories ─────────────────────────────────────────────────────────────────
+// ── Catégories séparées Resto et Fast-Food ─────────────────────────────────────
 const APP_CATEGORIES = [
   { id: "Tout",             label: "Tout",        emoji: "✨", color: "#64748b" },
   { id: "boutique",         label: "Boutique",    emoji: "📦", color: "#10b981" },
-  { id: "resto_fastfood",   label: "Resto",       emoji: "🍔", color: "#f59e0b", route: "/resto" },
+  { id: "resto",            label: "Resto (Plats)", emoji: "🍲", color: "#f97316", route: "/resto" },
+  { id: "fast-food",         label: "Fast-Food",   emoji: "🍔", color: "#f59e0b", route: "/fast-food" },
+  { id: "sante",            label: "Santé",       emoji: "💊", color: "#06b6d4", route: "/sante" },
   { id: "en_ligne",         label: "En Ligne",    emoji: "💻", color: "#7c3aed" },
   { id: "deal_particulier", label: "Particulier", emoji: "🤝", color: "#6366f1" },
   { id: "vehicule",         label: "Véhicules",   emoji: "🚗", color: "#1c93e4", route: "/vehicule" },
@@ -42,10 +42,69 @@ const APP_CATEGORIES = [
   { id: "supermarket",      label: "Supermarché", emoji: "🛒", color: "#0ea5e9", route: "/supermarket" },
 ];
 
-// Catégories spécialisées à exclure du flux général "Tout" pour garder le flux propre
-const EXCLUDED_FROM_ALL = ["supermarket", "resto_fastfood", "immobilier", "vehicule"];
+const EXCLUDED_FROM_ALL = [];
 
-// ── Skeleton ───────────────────────────────────────────────────────────────────
+/** Normalisation distincte pour isoler resto et fastfood */
+function normalizeProductType(p) {
+  const raw = (p?.type || p?.categorie || "").toLowerCase().trim();
+
+  if (
+    raw.includes("supermarche") ||
+    raw.includes("supermarket") ||
+    raw.includes("epicerie") ||
+    raw.includes("courses")
+  ) {
+    return "supermarket";
+  }
+
+  // Clé alignée sur APP_CATEGORIES id: "fast-food"
+  if (
+    raw.includes("fastfood") ||
+    raw.includes("fast-food") ||
+    raw.includes("fast_food") ||
+    raw.includes("burger") ||
+    raw.includes("sandwich") ||
+    raw.includes("tacos") ||
+    raw.includes("pizza") ||
+    raw.includes("shawarma")
+  ) {
+    return "fast-food";
+  }
+
+  if (
+    raw.includes("resto") ||
+    raw.includes("restaurant") ||
+    raw.includes("plat") ||
+    raw.includes("foutou") ||
+    raw.includes("attieke") ||
+    raw.includes("riz") ||
+    raw.includes("repas")
+  ) {
+    return "resto";
+  }
+
+  if (raw.includes("particulier") || raw.includes("deal") || raw.includes("occasion")) {
+    return "deal_particulier";
+  }
+  if (raw.includes("online") || raw.includes("en_ligne") || raw.includes("web")) {
+    return "en_ligne";
+  }
+  if (raw.includes("sante") || raw.includes("pharmacie") || raw.includes("health")|| raw.includes("indigena") || raw.includes("parapharmacie") || raw.includes("medical")) {
+    return "sante";
+  }
+  if (raw.includes("vehicule") || raw.includes("voiture") || raw.includes("moto")|| raw.includes("antara")|| raw.includes("saloni") || raw.includes("auto")) {
+    return "vehicule";
+  }
+  if (raw.includes("immobilier") || raw.includes("maison") || raw.includes("appartement")|| raw.includes("studio") || raw.includes("location")) {
+    return "immobilier";
+  }
+  if (raw.includes("boutique") || raw.includes("shop") || raw.includes("store") || raw.includes("vetement") || raw.includes("mode")) {
+    return "boutique";
+  }
+
+  return raw || "autre";
+}
+
 function SkeletonCard() {
   return (
     <div className="mf-skeleton">
@@ -59,12 +118,9 @@ function SkeletonCard() {
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
 export default function MarketplaceFull() {
   const navigate = useNavigate();
   const { addToCart, cart } = useCart();
-
-  // ── Le ref sur le container scrollable ──
   const scrollRef = useRef(null);
 
   const [products,          setProducts]         = useState([]);
@@ -73,16 +129,13 @@ export default function MarketplaceFull() {
   const [loading,           setLoading]           = useState(true);
   const [isSideNavOpen,     setIsSideNavOpen]     = useState(false);
   const [currentUser,       setCurrentUser]       = useState(null);
-  // ── isShrunk déclenché par le scroll du ref ──
   const [isShrunk,          setIsShrunk]          = useState(false);
 
-  // ── Handler scroll — stable grâce à useCallback ──
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return;
     setIsShrunk(scrollRef.current.scrollTop > 50);
   }, []);
 
-  // ── Auth + produits ──────────────────────────────────────────────────────
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, u => setCurrentUser(u));
     const vendorCache = {};
@@ -95,12 +148,10 @@ export default function MarketplaceFull() {
             id: d.id, ...data,
             imageUrl: data.images?.[0] || data.image || data.imageUrl || null,
           };
-        }).filter(p => p.nom && p.imageUrl);
+        }).filter(p => p.nom && (p.imageUrl || p.image || p.images?.[0]));
 
         const enriched = await Promise.all(raw.map(async p => {
           if (p.nomBoutique) return p;
-          
-          // Unification de la clé vendeur (vendeurId ou vendorId)
           const actualVendorId = p.vendeurId || p.vendorId;
           if (!actualVendorId) return { ...p, nomBoutique: "Mambo" };
 
@@ -111,7 +162,6 @@ export default function MarketplaceFull() {
           };
 
           try {
-            // Lecture exclusive dans la collection unique "users"
             const v = await getDoc(doc(db, "users", actualVendorId));
             if (v.exists()) {
               const vendorData = v.data();
@@ -125,7 +175,7 @@ export default function MarketplaceFull() {
               };
             }
           } catch (e) {
-            console.error("Erreur enrichissement vendeur depuis 'users':", e);
+            console.error("Erreur enrichissement vendeur:", e);
           }
           return { ...p, nomBoutique: "Mambo" };
         }));
@@ -142,42 +192,40 @@ export default function MarketplaceFull() {
     return () => { unsub(); unsubAuth(); };
   }, []);
 
-  // ── Compteurs catégories (avec prise en compte des exclusions) ──
   const catCounts = useMemo(() => {
     const c = { Tout: 0 };
-    products.forEach(p => {
-      const t = (p.type || p.categorie || "").toLowerCase();
-      if (t) {
-        c[t] = (c[t] || 0) + 1;
-        if (!EXCLUDED_FROM_ALL.includes(t)) {
-          c["Tout"] += 1;
-        }
-      }
+    products.forEach((p) => {
+      const t = normalizeProductType(p);
+      if (!t) return;
+      c[t] = (c[t] || 0) + 1;
+      c["Tout"] += 1;
     });
     return c;
   }, [products]);
 
-  // ── Filtrage avec exclusion stricte pour l'onglet "Tout" ──
   const filtered = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
-    return products.filter(p => {
-      const pType = (p.type || p.categorie || "").toLowerCase();
-      
+    const active = activeCategoryId.toLowerCase();
+    return products.filter((p) => {
+      const pType = normalizeProductType(p);
+
       let matchCat = false;
-      if (activeCategoryId === "Tout") {
-        matchCat = !EXCLUDED_FROM_ALL.includes(pType);
+      if (active === "tout") {
+        matchCat = true;
       } else {
-        matchCat = pType === activeCategoryId.toLowerCase();
+        matchCat = pType === active;
       }
 
-      const matchTerm = !term || [p.nom, p.nomBoutique, p.marque, p.description]
-        .some(v => v?.toLowerCase().includes(term));
-        
+      const matchTerm =
+        !term ||
+        [p.nom, p.nomBoutique, p.marque, p.description, p.enseigne].some((v) =>
+          v?.toLowerCase().includes(term)
+        );
+
       return matchCat && matchTerm;
     });
   }, [products, searchTerm, activeCategoryId]);
 
-  // ── Redirection optimisée et unifiée ──
   const handleProductClick = (product) => {
     const targetVendorId = product.vendeurId || product.vendorId;
     if (targetVendorId && product.id) {
@@ -205,7 +253,6 @@ export default function MarketplaceFull() {
     <div className="mf-root">
       <ToastContainer position="top-center" autoClose={1500} hideProgressBar/>
 
-      {/* ── MENU LATÉRAL ── */}
       <div className={`side-nav-overlay ${isSideNavOpen ? "visible" : ""}`} onClick={() => setIsSideNavOpen(false)}/>
       <div className={`side-nav ${isSideNavOpen ? "open" : ""}`}>
         <div className="side-nav-profile-header">
@@ -239,7 +286,6 @@ export default function MarketplaceFull() {
         </div>
       </div>
 
-      {/* ── HEADER ── */}
       <header className={`market-header-modern ${isShrunk ? "shrunk" : ""}`}>
         <div className="header-top-row">
           <button className="nav-icon-btn" onClick={() => navigate(-1)}><ArrowLeft size={22}/></button>
@@ -318,7 +364,6 @@ export default function MarketplaceFull() {
         )}
       </header>
 
-      {/* ── SCROLL CONTAINER ── */}
       <main
         ref={scrollRef}
         className="market-main-scroll"
@@ -335,6 +380,7 @@ export default function MarketplaceFull() {
                 products={filtered}
                 onProductClick={handleProductClick}
                 onBuyClick={handleBuyNow}
+                groupByCategory={activeCategoryId === "Tout"}
               />
             ) : (
               <div className="empty-state">
@@ -351,7 +397,6 @@ export default function MarketplaceFull() {
         <div style={{height:80}}/>
       </main>
 
-      {/* Panier flottant */}
       {cart.length > 0 && (
         <div className="mf-cart-float" onClick={() => navigate("/cart")}>
           <ShoppingCart size={18}/>
