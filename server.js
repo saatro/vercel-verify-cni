@@ -422,24 +422,25 @@ ou passeport). Réponds UNIQUEMENT avec un objet JSON strictly valide, sans text
 Si l'image n'est pas une pièce d'identité lisible, mets "isIdDocument": false et les autres champs à "".`;
 
   // ✅ CODE CORRIGÉ (Modèle à jour)
-const response = await fetch(
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-  {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { text: prompt },
-            { inline_data: { mime_type: "image/jpeg", data: imageBase64 } },
-          ],
-        },
-      ],
-      generationConfig: { temperature: 0 },
-    }),
-  }
-);
+  // Remplacez gemini-2.5-flash par gemini-3.8-flash (ou le modèle ciblé)
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: "image/jpeg", data: imageBase64 } },
+            ],
+          },
+        ],
+        generationConfig: { temperature: 0 },
+      }),
+    }
+  );
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "");
